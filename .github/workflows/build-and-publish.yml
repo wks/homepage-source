@@ -14,14 +14,17 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v2
 
-    - name: Install bundle packages
-      run: bundle install
+    - name: Set up Ruby and install bundle packages
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: 3.0
+        bundler-cache: true
         
     - name: Build with Jekyll
       run: bundle exec jekyll build
 
-    - name: Debug
-      run: find .
+    - name: List files in _site for debugging
+      run: find ./_site
 
     - name: Deploy to GitHub Pages
       uses: peaceiris/actions-gh-pages@v3
