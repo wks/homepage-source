@@ -1,4 +1,5 @@
 ---
+key:      Wang2017
 kind:     phdthesis
 author:   Kunshan Wang
 title:    "Micro Virtual Machines: A Solid Foundation for Managed Language Implementation"
