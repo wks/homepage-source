@@ -55,3 +55,6 @@ plugins:
 
 collections:
   publications:
+
+# Blog
+author: "Kunshan Wang"
