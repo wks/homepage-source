@@ -8,7 +8,7 @@ title: Home
 I am a programming language and virtual machine enthusiast.
 
 I am a contributor to the [Memory Management Toolkit (MMTk)][mmtk]
-project. I am actively developing a [MMTk binding for Ruby][ruby-mmtk]
+project. I am actively developing an [MMTk binding for Ruby][ruby-mmtk]
 so that the [Ruby][ruby] interpreter can use MMTk as its garbage
 collection backend.
 
