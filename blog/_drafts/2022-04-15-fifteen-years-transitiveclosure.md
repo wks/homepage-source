@@ -276,8 +276,10 @@ in history.
 
 ### In the beginning, there was only TraceLocal
 
-[TraceLocal was the root class][tracelocal-beginning].  There was no
+[TraceLocal was a root class][tracelocal-beginning].  There was no
 `TransitiveClosure` or whatever superclass/interface it could extend/implement.
+(`Constants` is an all-static interface, and `Uninterruptible` is just a
+marker.)
 
 ```java
 public abstract class TraceLocal implements Constants, Uninterruptible {
@@ -338,15 +340,36 @@ This code clearly expresses the idea: "Let the `TraceLocal` handle each field."
 
 Yes! **In the beginning, object scanning was tightly coupled with tracing!**
 Whenever MMTk scanned an object, it was for only one purpose -- *tracing*, i.e.
-finding neighbors, mark/forward the neighbours, and possibly update the object
+finding neighbours, mark/forward the neighbours, and possibly update the object
 fields.
 
-Then things changed in 2007.
+Then things changed in 2006.
 
 [tracelocal-beginning]: https://github.com/JikesRVM/JikesRVM/blob/600956237939e61b314535d485dfdfcbab2c0bbe/MMTk/src/org/mmtk/plan/TraceLocal.java#L42
 
 ### Then someone introduced field visitor..., err, I mean, "TraceStep"
 
+In 2006, someone created [a commit which introduced a new
+version of reference counting][tracestep-commit].
+
+That reference counting algorithm was based on trial deletion.  
+
+```java
+public abstract class TraceStep implements Constants, Uninterruptible {
+  public abstract void traceObjectLocation(Address objLoc);
+}
+
+public abstract class TraceLocal extends TraceStep 
+  implements Constants, Uninterruptible {
+
+  public final void traceObjectLocation(Address objLoc)
+    throws InlinePragma {
+    traceObjectLocation(objLoc, false);
+  }
+}
+```
+
+[tracestep-commit]: https://github.com/JikesRVM/JikesRVM/commit/64f538ca4d348f062f3afb313f519ffcbbbd22bd
 
 ## See also
 
