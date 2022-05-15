@@ -87,6 +87,7 @@ interfaces.
 [mmtk-core]: https://github.com/mmtk/mmtk-core
 [tc-bad]: https://github.com/mmtk/mmtk-core/blob/093da769a71067dcd4f37db6f453213e7dace660/src/plan/transitive_closure.rs#L12
 [oc-bad]: https://github.com/mmtk/mmtk-core/blob/093da769a71067dcd4f37db6f453213e7dace660/src/plan/transitive_closure.rs#L51
+[wtf]: https://www.dictionary.com/browse/wtf
 
 ## Should we split TransitiveClosure?
 
@@ -368,13 +369,13 @@ them contain a buffer (a remember set, or the tracing queue) where the
 
 There comes an interesting question:
 
->   *If some classes are just field visitors, why don't we have an interface
->   like `FieldVisitor`?*
+>   *If some classes are just field visitors, why don't we have a dedicated
+>   interface for it, such as `FieldVisitor`?*
 
 and
 
->   *If some classes are just places to enqueue objects, why don't we have an
->   interface like `ObjectBuffer`?*
+>   *If some classes are just places to enqueue objects, why don't we have a
+>   dedicated for it, interface like `ObjectBuffer`?*
 
 `TransitiveClosure` has been there for 15 years.  Many developers have made
 contributions to MMTk, and some of them must have noticed the issues I talked
@@ -540,7 +541,7 @@ refactoring.
 [jikesrvm-beginning-scanning]: https://github.com/JikesRVM/JikesRVM/blob/600956237939e61b314535d485dfdfcbab2c0bbe/MMTk/src/org/mmtk/vm/Scanning.java
 [jikesrvm-beginning-tracelocal]: https://github.com/JikesRVM/JikesRVM/blob/600956237939e61b314535d485dfdfcbab2c0bbe/MMTk/src/org/mmtk/plan/TraceLocal.java#L42
 
-### Unifying scanObject and enumeratePointers with "TraceStep"
+### Unifying scanObject and enumeratePointers with "raceStep"
 
 In late 2006, [someone created a commit][jikesrvm-tracestep-commit] which
 introduced a new version of reference counting collector, and at the same time
@@ -754,7 +755,8 @@ pub trait Scanning<VM: VMBinding> {
 
 ```
 
-And the signature of `CopySpace::trace_object` method was like this:
+And the `XxxSpace::trace_object` methods still took `TransitiveClosure` as
+parameter, like this:
 
 ```rust
 impl<VM: VMBinding> CopySpace<VM> {
@@ -770,7 +772,7 @@ impl<VM: VMBinding> CopySpace<VM> {
 }
 ```
 
-And [there was still TraceLocal][mmtk-core-prewp-tl].
+And [there was still TraceLocal][mmtk-core-prewp-tl]. (Not any more now.)
 
 ```rust
 pub trait TraceLocal: TransitiveClosure {
@@ -780,17 +782,18 @@ pub trait TraceLocal: TransitiveClosure {
 
 Like in JikesRVM MMTk,
 
--   the `scan_object` method called `trace.process_edge` for each visited edge,
-    and
--   the `trace_object` method called `trace.process_node` to enqueue the object
-    on first visit.
+-   the `scan_object` method still called `trace.process_edge` for each visited
+    edge, and
+-   the `trace_object` method still called `trace.process_node` to enqueue the
+    object on first visit.
 
-*We did not address the fact that TransitiveClosure served two different
-purposes.* By that time, we had just begun porting MMTk to Rust.  We prioritised
-making Rust MMTk working, and ported from JikesRVM MMTk in a style closely
-resembled the original Java code.
+Initially, *we did not address the fact that TransitiveClosure served two
+different purposes.* By that time, we had just begun porting MMTk to Rust.  **We
+prioritised making Rust MMTk working**, and ported from JikesRVM MMTk in a style
+closely resembled the original Java code.
 
-And MMTk worked.
+And MMTk worked.  Not just worked, but worked for OpenJDK, JikesRVM and several
+other VMs, too.
 
 [mmtk-core-prewp-tl]: https://github.com/mmtk/mmtk-core/blob/96855d287fe5ea789a532f347d6ee37e6679c71f/src/plan/tracelocal.rs
 
@@ -802,53 +805,447 @@ The work packet system presents each unit of work as a "packet" that can be
 scheduled on any GC worker thread.  The `TraceLocal` class was replaced by two
 work packets:
 
--   The `ProcessEdgesWork` work packet which represents a list of edges to be
-    traced.
--   The `ScanObjects` work packet which represents a list of objects to be
-    scanned.
+-   The `ProcessEdgesWork` work packet represents a list of edges to be traced.
+-   The `ScanObjects` work packet represents a list of objects to be scanned.
 
-A `ProcessEdgesWork` work packet also carries an object queue inside it.
-`ProcessEdgesWork` loads form each edge and calls `XxxSpace.trace_object`.
-Because `XxxSpace.trace_object` needs to enqueue the object when first visited,
-`ProcessEdgesWork` implements the `TransitiveClosure` trait so that
-`trace_object` can call `ProcessEdgesWork.process_node` to enqueue the object.
-Then we see the code that startled in the beginning.
+A `ProcessEdgesWork` work packet also carries an object queue inside it.  It
+needs the `process_node` method so that `XxxSpace.trace_object` can call it and
+queue newly visited objects.
+
+Therefore, `ProcessEdgesWork` implements TransitiveClosure because
+`trace_object` expects it. And... remember?  That implementation startled me...
 
 ```rust
 impl<T: ProcessEdgesWork> TransitiveClosure for T {
-    fn process_edge(&mut self, _slot: Address) {    // Never called through the TransitiveClosure trait
+    fn process_edge(&mut self, _slot: Address) {
         unreachable!();
     }
     #[inline]
-    fn process_node(&mut self, object: ObjectReference) { // trace_object calls this
+    fn process_node(&mut self, object: ObjectReference) {
         ProcessEdgesWork::process_node(self, object);
     }
 }
 ```
 
-Although `ProcessEdgesWork` does have a `process_edge` method, it doesn't need
-to implement it for `TransitiveClosure`, because `process_edge` is only called
-internally, and is never called through the `TransitiveClosure` interface. The
-only call site of `process_edge` through `TransitiveClosure` is still
-`Scanning.scan_object`, as you have seen before.
+Then what visits edges when scanning an object?  It is now the `ObjectsClosure`
+object.  It needs to provide `process_edge`, but `Scanning::scan_object` expects
+`TransitiveClosure`.
 
-As you can see, **even after we migrated to the work packet system, we still
-kept both `process_edge` and `process_node` in the `TransitiveClosure` trait**.
+So we have to do what the [...][wtf] we need to satisfy that requirement, as we
+have seen before:
+
+```rust
+impl<'a, E: ProcessEdgesWork> TransitiveClosure for ObjectsClosure<'a, E> {
+    #[inline(always)]
+    fn process_edge(&mut self, slot: Address) {
+        if self.buffer.is_empty() {
+            self.buffer.reserve(E::CAPACITY);
+        }
+        self.buffer.push(slot);
+        // ... more code omitted.
+    }
+    fn process_node(&mut self, _object: ObjectReference) {
+        unreachable!()
+    }
+} 
+```
+
+As you can see, **even after we migrated to the work packet system, and even
+though we no longer have any type that overrides both `process_edge` and
+`process_node`, we still kept both `process_edge` and `process_node` in the
+`TransitiveClosure` trait**.
 
 [rust-mmtk]: https://www.mmtk.io/
 
 ## Why do we end up having TransitiveClosure like this?
 
+We have been startled by smelly code.  We have [expressed our anger, impatience,
+surprise, etc., without explicit vulgarity][wtf].  We have looked into JikesRVM
+for the old MMTk.  We have gone through the history to see the change of the
+object scanning interface, and read the commits from developers with the
+intention of improving MMTk.
+
+But why do we end up having a `TransitiveClosure` trait like this?
+
+### Have we noticed that object scanning is not necessarily part of tracing?
+
+Yes.  The [`Enumerator`][jikesrvm-c2ff-commit] interface was introduced just for
+that.  When called back from `scan_object`, it allows us to do anything to
+reference fields.
+
+### Have we refactored scan_object so it takes a simple callback?
+
+Yes.  When [`TraceStep`][jikesrvm-tracestep-commit] was introduced, We unified
+`Scanning.scanObject` and `Scanning.enumeratePointers`.  `Scanning.scanObject`
+was refactored to only depend on `TraceStep`, and `TraceStep` was an abstract
+class with only an abstract method `traceObjectLocation(Address objLoc)`.
+
+```java
+public abstract class TraceStep implements Constants, Uninterruptible {
+    public abstract void traceObjectLocation(Address objLoc);
+}
+
+public abstract class Scanning implements Constants, Uninterruptible {
+    public abstract void scanObject(TraceStep trace, ObjectReference object);
+}
+```
+
+This should have been the ideal interface for `Scanning.scan_object` for MMTk in
+Java.  (Rust could use closure to make it more concise.)
+
+### But why did we migrate away from it?
+
+Probably only the author of [this commit][jikesrvm-2007] knows the exact reason.
+
+To my understanding, I think it was because **`TraceStep` was such a good, but
+a wrong, name**.
+
+1.  We named it "TraceStep".
+
+2.  We made it the superclass of `TraceLocal`.
+
+3.  We then [introduced TraceWriteBuffer][jikesrvm-2257-commit].
+
+4.  We noticed `TraceWriteBuffer` was another place to enqueue objects in
+    addition to `TraceLocal`.
+
+5.  Then we naturally thought that both `TraceWriteBuffer` and `TraceLocal`
+    should have a common superclass that had a method named `enqueue`.
+
+    But `TraceStep` doesn't have `enqueue`.
+
+6.  Then we extended `TraceStep` into `TransitiveClosure`, and added `enqueue`.
+
+    And we even renamed `enqueue` to `processNode` to make it consistent with
+    `processEdge`.
+
+7.  Then we have `TransitiveClosure` which had `processEdge` and `processNode`.
+
+```java
+public abstract class TraceLocal extends TransitiveClosure {
+    public final void processNode(ObjectReference object) { ... }
+}
+
+public final class TraceWriteBuffer extends TransitiveClosure {
+    public void processNode(ObjectReference object) { ... }
+}
+```
+
+Wow!  "TransitiveClosure" was an even better name!  That was what `TraceLocal`
+really was, i.e. computing the transitive closure of an object graph!  A
+"transitive closure" is a graph!  A graph has nodes and edges!
+
+```java
+public abstract class TransitiveClosure {
+  public void processEdge(Address objLoc) { ... }
+  public void processNode(ObjectReference object) { ... }
+}
+```
+
+But `TraceWriteBuffer` doesn't override `processEdge`, and `RCZero` doesn't
+override `processNode`!
+
+No worries.  We leave them "unimplemented".
+
+"Unimplemented"?  That doesn't sound right.
+
+But it worked... for 15 years.
+
+The name "TransitiveClosure"  made so much sense that we stuck to
+`TransitiveClosure` forever, even after we ported MMTk to Rust.
+
+### But TraceStep is a wrong name.
+
+1.  `TraceLocal`, "mark grey", "scan black", `RCZero` and so on are all steps in
+    tracing,
+2.  and those trace steps process edges,
+3.  hence `Scanning.scanObject` should accept `TraceStep`, so
+    `Scanning.scanObject` can give `TraceStep` edges to process.
+
+Wrong.
+
+`Scanning.scanObject` accepts a callback object not because the callback is a
+step of tracing, but simply **because the callback visits edges**.
+
+I don't really know what counts as a "trace step".
+
+-   Does "assigning `null` to each reference field" count as a "trace step"?
+-   Does "applying decrement operations to the reference counts of all neighbor
+    objects" count as a "trace step" even if it is used in reference counting,
+    only?
+-   Is trial-deletion considered as a kind of tracing at all?
+
+No matter what it is, isn't it much easier to just say
+
+>   *"`Scanning.scanObject` accepts it because it visits edges."*
+
+### The nature of interfaces.
+
+This is the nature of interfaces.  A reuseable component should not make
+assumptions about its neighbours more than necessary.  This is **the
+separation of concern**.
+
+It is just like when we do the following in rust:
+
+```rust
+vec![1,2,3].iter().foreach(|e| {
+    println!("{}", e);
+});
+```
+
+The `Iterator::foreach` function accepts this closure not because it prints
+things, but because it visits elements.  `foreach` is intended for visiting
+elements.  The closure receives the object.  That is the contract of the
+`foreach` method.  Whether it prints the element or how it prints the element is
+not part of the contract.
+
+So "Enumerator" was a right name.  It correctly describes the purpose of the
+object, that is, *"it enumerates fields"*, nothing more.  That's all what
+`Scanning.scanObject` need to care about.  It passes each field to the callback,
+and that's it.  It should not assume what that callback object is.  Whether it
+is a `TraceLocal` or an RC operation is beyond its obligation.
+
+"TraceStep" was wrong.  "TransitiveClosure" was also wrong.  Neither of them
+is what `Scanning.scanObject` cares about.
+
+
+## Finding the way out
+
+We have seen the history, and know why it ended up like this.
+
+We know what was wrong, and what would be right.
+
+"Enumerator" was right.  "TraceStep" was wrong.  "TransitiveClosure" was wrong,
+too, but it just sounded so good.
+
+No matter how good it sounds, we need to fix it.
+
+From our analysis in the beginning of this article, we should split
+`TransitiveClosure` into two traits,
+
+1.  one as the callback of `Scanning::scan_object`, and
+2.  the other to be used by `XxxSpace::trace_object` to enqueue object.
+
+I have opened an [issue][mmtk-core-issue-remove-tc], and detailed the steps of
+splitting and removing `TransitiveClosure` from `mmtk-core`.
+
+[mmtk-core-issue-remove-tc]: https://github.com/mmtk/mmtk-core/issues/559
+
+### Refactoring Scanning::scan_object
+
+`Scanning::scan_object` takes an object and a callback as parameters.  It will
+find all reference fields in the object, and invoke the callback for each
+reference field.
+
+We need a proper name for the callback of `Scanning::scan_object`.
+
+I name it `EdgeVisitor`, and its only method is, as you can imagine,
+`visit_edge`.
+
+```rust
+pub trait EdgeVisitor {
+    fn visit_edge(&mut self, edge: Address);
+}
+```
+
+And it replaces `TransitiveClosure` as the parameter type of
+`Scanning::scan_object`:
+
+```rust
+pub trait Scanning<VM: VMBinding> {
+    fn scan_object<EV: EdgeVisitor>(
+        tls: VMWorkerThread,
+        object: ObjectReference,
+        edge_visitor: &mut EV,
+    );
+}
+```
+
+Then the only callback that have ever been passed to `Scanning::scan_object`,
+i.e. `ObjectsClosure`, now implements `EdgeVisitor`, instead.
+
+```rust
+impl<'a, E: ProcessEdgesWork> EdgeVisitor for ObjectsClosure<'a, E> {
+    fn visit_edge(&mut self, slot: Address) {
+        // ... code omitted
+    }
+}
+```
+
+And this change has been [merged][mmtk-core-commit-ev] into the master branch of
+`mmtk-core`.
+
+[mmtk-core-commit-ev]: https://github.com/mmtk/mmtk-core/commit/0babba20290d3c4e4cdb2a83284aa7204c9a23cc
+
+#### Meanwhile in Australia...
+
+While I was refactoring `mmtk-core` and working on `mmtk-ruby`, my colleague
+[Wenyu Zhao][wenyu-homepage] was busy with [his paper about the LXC GC algorithm][paper-lxc] targetting [PLDI 2022][paper-lxc-pldi].
+
+Wenyu [independently introduced][wenyu-commit-ei] the
+[`EdgeIterator`][wenyu-file-ei] struct.  It is a wrapper over
+`Scanning::scan_object` and `TransitiveClosure`, and the `unreachable!()`
+statement, too! :P
+
+```rust
+pub struct EdgeIterator<'a, VM: VMBinding> {
+    f: Box<dyn FnMut(Address) + 'a>,
+    _p: PhantomData<VM>,
+}
+
+impl<'a, VM: VMBinding> EdgeIterator<'a, VM> {
+    pub fn iterate(o: ObjectReference, f: impl FnMut(Address) + 'a) {
+        let mut x = Self { f: box f, _p: PhantomData };
+        <VM::VMScanning as Scanning<VM>>::scan_object(&mut x, o, VMWorkerThread(VMThread::UNINITIALIZED));
+    }
+}
+
+impl<'a, VM: VMBinding> TransitiveClosure for EdgeIterator<'a, VM> {
+    #[inline(always)]
+    fn process_edge(&mut self, slot: Address) {
+        (self.f)(slot);
+    }
+    fn process_node(&mut self, _object: ObjectReference) {
+        unreachable!()
+    }
+}
+```
+
+With this struct, it allows a closure to be used in the place of a
+`TransitiveClosure`.  The following code applies the `inc` RC operation to all
+adjacent objects:
+
+```rust
+EdgeIterator::<E::VM>::iterate(src, |edge| {
+    self.inc(unsafe { edge.load() });
+})
+```
+
+And the following applies `dec`, and optionally frees the object:
+
+```rust
+EdgeIterator::<VM>::iterate(o, |edge| {
+    let t = unsafe { edge.load::<ObjectReference>() };
+    if !t.is_null() {
+        if Ok(1) == super::rc::dec(t) {
+            debug_assert!(super::rc::is_dead(t));
+            f(t);
+        }
+    }
+});
+```
+
+Pretty neat, isn't it?  It is so neat that I want to steal the code and add an
+`EdgeVisitor::from_closure` factory method for my `EdgeVisitor`.
+
+One interesting thing is, Wenyu introduced this for reference counting,
+according to the [commit message][wenyu-commit-ei].  What a coincidence!  Daniel
+[introduced `TraceStep` in 2006][jikesrvm-tracestep-commit] for exactly the same
+reason: reference counting, according to its commit message, too.
+Understandably, reference counting is very different from tracing.  RC needs to
+scan objects, but not for tracing, so passing `TraceLocal` to `scan_object`
+doesn't make sense.  Therefore, those additional operations, be it mark-grey,
+scan-black or just freeing objects, all define their own callbacks to be called
+by `scan_object`. This necessitates the creation of a better interface for the
+callback of `scan_object`.
+
+[wenyu-homepage]: https://wenyu.me/
+[paper-lxc]: https://users.cecs.anu.edu.au/~steveb/pubs/papers/lxr-pldi-2022.pdf
+[paper-lxc-pldi]: https://pldi22.sigplan.org/details/pldi-2022-pldi/15/Low-Latency-High-Throughput-Garbage-Collection
+[wenyu-commit-ei]: https://github.com/wenyuzhao/mmtk-core/commit/9587aca2c62e02e043a5f01c3488cd91e21515b0
+[wenyu-file-ei]: https://github.com/wenyuzhao/mmtk-core/blob/9587aca2c62e02e043a5f01c3488cd91e21515b0/src/plan/transitive_closure.rs#L88
+
+### Refactoring Space::trace_object
+
+The `XxxSpace::trace_object` method usually has this form:
+
+```rust
+impl<VM: VMBinding> CopySpace<VM> {
+    #[inline]
+    pub fn trace_object<T: TransitiveClosure>(
+        &self,
+        trace: &mut T,
+        object: ObjectReference,
+        semantics: Option<CopySemantics>,
+        worker: &mut GCWorker<VM>,
+    ) -> ObjectReference {
+        // ... more code omitted
+        if /* is first visited */ {
+            let new_object = object_forwarding::forward_object::<VM>(...);
+
+            trace.process_node(new_object);  // enqueue object
+            new_object  // return the forwarded obj ref
+        }
+    }
+
+    // ... more code omitted
+}
+```
+
+If an object is first visited, it enqueues the object in `trace`, and returns
+the forwarded object reference.
+
+This method is polymorphic w.r.t. `T`.  `T` is the `ProcessEdgesWork` (a
+sub-trait of `TransitiveClosure`) type used by the plan.  We used to have one
+different `ProcessEdgesWork` type for each plan, which made this generic type
+parameter necessary.
+
+We already [noticed][mmtk-core-comment-remove-tc] that we may safely remove this
+only use case of the `TransitiveClosure` trait (i.e. `trace_object`) once we
+remove plan-specific `ProcessEdgesWork` implementations. And the good thing is,
+we have recently just [removed][mmtk-core-commit-remove-pew] all plan-specific
+`ProcessEdgesWork` implementations. Although we are not sure whether we will
+have plan-specific `ProcessEdgesWork` for complex GC algorithms in the future, I
+think the code is much cleaner for a refactoring.
+
+However, I [believe][mmtk-core-issue-remove-tc] the `trace` parameter is
+completely unnecessary.  We just need a return value to indicate whether it is
+the first time the object is visited, so that the *caller* of `trace_object`
+(which is only `ProcessEdgesWork::process_edge` at this time) can enqueue the
+object.  So instead of
+
+```rust
+fn process_edge(&mut self, slot: Address) {
+    let object = unsafe { slot.load::<ObjectReference>() };
+    let new_object = self.trace_object(object);
+    if Self::OVERWRITE_REFERENCE {
+        unsafe { slot.store(new_object) };
+    }
+}
+```
+
+we shall have
+
+```rust
+fn process_edge(&mut self, slot: Address) {
+    let object = unsafe { slot.load::<ObjectReference>() };
+    let (new_object, first_visit) = self.trace_object(object);
+    if Self::OVERWRITE_REFERENCE {
+        unsafe { slot.store(new_object) };
+    }
+    if first_visit {
+        self.enqueue(new_object);
+    }
+```
+
+However, the `#[inline]` above `trace_object` indicates that it is very
+performance-critical.  We'd better measure before making the decision to change.
+
+[mmtk-core-comment-remove-tc]: https://github.com/mmtk/mmtk-core/issues/110#issuecomment-954335561
+[mmtk-core-commit-remove-pew]: https://github.com/mmtk/mmtk-core/commit/93281e9563fb5a780b880c086f67c75fc66bc8f8
+
+## Epilogue
+
+After fifteen years, the `TransitiveClosure` trait is finally going to change.
+
+The Rust MMTk is under active development now.  As we proceed, we may see more
+things like this, things that have remained in its current state for years, or
+even decades.  But this doesn't mean they are always right.  We have to rethink
+about the code again and again, and fix the problems whenever we can.
 
 ## See also
 
-See https://github.com/mmtk/mmtk-core/issues/559
-
-We have identified this.  We mentioned that we could remove `TransitiveClosure`
-in [this issue][mmtk-core-comment-remove-tc], and we just need someone to do it.
-
-[mmtk-core-comment-remove-tc]: https://github.com/mmtk/mmtk-core/issues/110
-
+The tracking issue: https://github.com/mmtk/mmtk-core/issues/559
 
 <!--
 vim: tw=80
