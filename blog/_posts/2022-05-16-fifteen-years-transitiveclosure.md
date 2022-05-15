@@ -7,7 +7,8 @@ tags: mmtk
 The `TransitiveClosure` interface in MMTk is confusing.  It is an amalgamation
 of two different interfaces, and should have been split.  However, no
 refactoring happened since it was introduced 15 years ago, when MMTk was still
-part of the JikesRVM..., until now.
+part of the JikesRVM..., until now.  What's more interesting is why we ended up
+having an interface like that 15 years ago, and how we should fix it.
 
 ## MMTk?
 
