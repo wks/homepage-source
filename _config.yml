@@ -33,6 +33,10 @@ theme: jekyll-theme-hacker
 plugins:
   - jekyll-feed
 
+# Without this, if I publish a blog in China, the GitHub Actions server in the
+# US may think the date is in the future. LOL :)
+future: true
+
 # Exclude from processing.
 # The following items will not be processed, by default.
 # Any item listed under the `exclude:` key here will be automatically added to
