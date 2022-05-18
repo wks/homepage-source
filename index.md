@@ -3,6 +3,8 @@ layout: default
 title: Home
 ---
 
+{% include recent_blog_posts.html %}
+
 ## About Me
 
 I am a programming language and virtual machine enthusiast.
