@@ -4,11 +4,10 @@ title: "A Wrong Name: Fifteen Years of TransitiveClosure in MMTk"
 tags: mmtk
 ---
 
-The `TransitiveClosure` interface in MMTk is confusing.  It is an amalgamation
-of two different interfaces, and should have been split.  However, no
-refactoring happened since it was introduced 15 years ago, when MMTk was still
-part of the JikesRVM..., until now.  What's more interesting is why we ended up
-having an interface like that 15 years ago, and how we should fix it.
+The `TransitiveClosure` interface in MMTk is confusing.  It should have been
+split into two different interfaces, but not... until now.  What's more
+interesting is how we ended up having an interface like that 15 years ago, and
+why it stayed that way since then.
 
 ## MMTk?
 
@@ -99,7 +98,7 @@ only implement the trait it needs, and not the `unreachable!()` stub.
 Or, should we?
 
 To confirm this, let's find their call sites, and see whether we ever use both
-methods at the same time..
+methods at the same time.  The short answer is, no.
 
 ### The process_node method
 
@@ -153,6 +152,8 @@ We confirmed that each of the two methods is used in a different scenario.
 
 -   `process_node` is only used by `trace_object`, and
 -   `process_edge` is only used by `scan_object`.
+
+And nothing calls both `process_node` and `process_edge` at the same time.
 
 So let's split them into two traits.
 
@@ -251,12 +252,12 @@ In JikesRVM, `TraceLocal` is the counterpart of both `ProcessEdgesWork` and
 
 -   `Space.traceObject` calls `TraceLocal.processNode` to enqueues newly visited
     objects,
-    -   just like `XxxSpace::trace_object` calling `ObjectClosure.process_edge`
-        in Rust MMTk.
+    -   just like `XxxSpace::trace_object` calling
+        `ProcessEdgesWork.process_node` in Rust MMTk.
 -   `Scanning.scanObject` calls `TraceLocal.processEdge` to process each
     reference field (edge),
-    -   just like `Scanning::scan_object` calling
-        `ProcessEdgesWork.process_edge` in Rust MMTk.
+    -   just like `Scanning::scan_object` calling `ObjectsClosure.process_edge`
+        in Rust MMTk.
 
 In JikesRVM MMTk, each plan (GC algorithm) defines its own `TraceLocal`
 subclass.
@@ -265,7 +266,7 @@ subclass.
 one `TraceLocal` for different kinds of traces.)*</small>
 
 It looks like the `TransitiveClosure` is a proper interface for `TraceLocal`.
-Both `processNode` and `processEdge` are implemented.
+It implements both `processNode` and `processEdge`.
 
 However, `TraceLocal` is the only class that implements both `processNode` and
 `processEdge`.  Other classes don't.
@@ -371,12 +372,12 @@ them contain a buffer (a remember set, or the tracing queue) where the
 There comes an interesting question:
 
 >   *If some classes are just field visitors, why don't we have a dedicated
->   interface for it, such as `FieldVisitor`?*
+>   interface for it, and name it `FieldVisitor`?*
 
 and
 
 >   *If some classes are just places to enqueue objects, why don't we have a
->   dedicated for it, interface like `ObjectBuffer`?*
+>   dedicated interface for it, and name it `ObjectBuffer`?*
 
 `TransitiveClosure` has been there for 15 years.  Many developers have made
 contributions to MMTk, and some of them must have noticed the issues I talked
@@ -403,12 +404,13 @@ The history of `Scanning.scanObject` is the history of object scanning interface
 and implementation.
 
 [Back in 2003][jikesrvm-68e3-tree], MMTk (was JMTk back then) and JikesRVM were
-more tightly coupled.  Unlike the modern `Scanning` interface, the `ScanObject`
-class back then contained concrete implementations directly. The
-[`ScanObject.scan`][jikesrvm-68e3-scan] method enumerates reference field, and
-called directly to the `Plan.traceObjectLocation` static method, which does the
-load/traceObject/store sequence like our modern `ProcessEdgesWork::process_edge`
-method.  Everything was hard-wired.  The operation for visiting field was fixed.
+more tightly coupled than they are today.  Unlike the modern `Scanning`
+interface, the `ScanObject` class back then contained concrete implementations
+directly. The [`ScanObject.scan`][jikesrvm-68e3-scan] method enumerates
+reference fields, and directly calls the `Plan.traceObjectLocation` static
+method, which does the load/traceObject/store sequence like our modern
+`ProcessEdgesWork::process_edge` method.  Everything was hard-wired.  The
+operation for visiting field was fixed.
 
 [A commit in 2003][jikesrvm-e7bc-commit] introduced the
 [`ScanObject.enumeratePointers`][jikesrvm-e7bc-enum] method which calls back to
@@ -416,8 +418,8 @@ method.  Everything was hard-wired.  The operation for visiting field was fixed.
 degree of freedom of what to do with each field, instead of
 load/traceObject/store.
 
-[Another commit in 2003][jikesrvm-e719-commit] introduced the `Enumerate` class,
-and was subsequently renamed to `Enumerator` and [made
+[Another commit in 2003][jikesrvm-e719-commit] introduced the `Enumerate` class
+which was subsequently renamed to `Enumerator` and [made fully
 abstract][jikesrvm-c2ff-commit].
 
 ```java
@@ -455,7 +457,7 @@ public abstract class Scanning implements Constants, Uninterruptible {
 ```
 
 Both `scanObject` and `enumeratePointers` enumerate reference fields in an
-object.  However, they are used differently.
+object.  However, they are used in totally different places.
 
 #### Scanning.scanObject
 
@@ -467,7 +469,8 @@ Note that at that time, [TraceLocal was a root
 class][jikesrvm-beginning-tracelocal]. There was no superclasses or interfaces
 like `TransitiveClosure` for it to extend/implement. (`Constants` is an
 all-static interface, and `Uninterruptible` is just a marker.)  This means
-`scanObject` only applies to subclasses of `TraceLocal`.
+`scanObject` was only applicable to subclasses of `TraceLocal`, and nothing
+else.
 
 ```java
 public abstract class TraceLocal implements Constants, Uninterruptible { // no superclass
@@ -546,7 +549,7 @@ refactoring.
 
 In late 2006, [someone created a commit][jikesrvm-tracestep-commit] which
 introduced a new version of reference counting collector, and at the same time
-did "a huge refactoring".
+did "a huge refactoring" (see the commit message).
 
 This commit created a class named `TraceStep`.  `Scanning.scanObject` then took
 `TraceStep` as parameter instead of `TraceLocal`.  The `enumeratePointers`
@@ -612,7 +615,7 @@ This commit successfully unified the object scanning interface.
 applicable to all `TraceStep` instances alike, and was no longer coupled with
 `TraceLocal`. Good! Nicely done!
 
-What's more, this commit cleverly found a concept that describes both
+More over, this commit cleverly found a concept that describes both
 `TraceLocal` and the various operations in reference counting, such as "mark
 grey", "scan black", etc.  It was **"TraceStep"**.  Intuitively, all of them
 were steps of tracing.
@@ -661,7 +664,7 @@ Note that I didn't add any `// ... more code omitted` comment because back in
 
 `TraceLocal` now extends `TransitiveClosure` instead of `TraceStep`, and
 
--   the `traceObjectLocation` method was renamed to `processNode`, and
+-   the `traceObjectLocation` method was renamed to `processEdge`, and
 -   the `enqueue` method was renamed to `processNode`.
 
 ```java
@@ -694,10 +697,10 @@ public final class TraceWriteBuffer extends TransitiveClosure {
 It remains the only class that overrides `processNode` but note `processEdge`
 in the history of JikesRVM, even today.
 
-With this change, `TransitiveClosure` started to serve purposes.
+With this change, `TransitiveClosure` started to serve two distinct purposes.
 
-1.  One was the callback for `scanObject`, and
-2.  the other was the place to enqueue an object after tracing it.
+1.  the callback for `scanObject`, and
+2.  the place to enqueue an object after tracing it.
 
 If a class was only used in one of the two cases, it would override only one of
 the two methods.
@@ -802,7 +805,7 @@ other VMs, too.
 
 We later removed `TraceLocal` and introduced the work packet system.
 
-The work packet system presents each unit of work as a "packet" that can be
+The work packet system represents each unit of work as a "packet" that can be
 scheduled on any GC worker thread.  The `TraceLocal` class was replaced by two
 work packets:
 
@@ -874,7 +877,7 @@ Yes.  The [`Enumerator`][jikesrvm-c2ff-commit] interface was introduced just for
 that.  When called back from `scan_object`, it allows us to do anything to
 reference fields.
 
-### Have we refactored scan_object so it takes a simple callback?
+### Have we refactored scan_object so it takes a simple callback instead of TraceLocal?
 
 Yes.  When [`TraceStep`][jikesrvm-tracestep-commit] was introduced, We unified
 `Scanning.scanObject` and `Scanning.enumeratePointers`.  `Scanning.scanObject`
@@ -946,9 +949,9 @@ public abstract class TransitiveClosure {
 But `TraceWriteBuffer` doesn't override `processEdge`, and `RCZero` doesn't
 override `processNode`!
 
-No worries.  We leave them "unimplemented".
+No worries.  We leave them "unreachable".
 
-"Unimplemented"?  That doesn't sound right.
+"Unreachable"?  That doesn't sound right.
 
 But it worked... for 15 years.
 
@@ -960,12 +963,12 @@ The name "TransitiveClosure"  made so much sense that we stuck to
 1.  `TraceLocal`, "mark grey", "scan black", `RCZero` and so on are all steps in
     tracing,
 2.  and those trace steps process edges,
-3.  hence `Scanning.scanObject` should accept `TraceStep`, so
-    `Scanning.scanObject` can give `TraceStep` edges to process.
+3.  hence `Scanning.scanObject` should accept `TraceStep` as a call-back
+    argument, so `Scanning.scanObject` can give `TraceStep` edges to process.
 
 Wrong.
 
-`Scanning.scanObject` accepts a callback object not because the callback is a
+`Scanning.scanObject` accepts a callback argument not because the callback is a
 step of tracing, but simply **because the callback visits edges**.
 
 I don't really know what counts as a "trace step".
@@ -978,7 +981,8 @@ I don't really know what counts as a "trace step".
 
 No matter what it is, isn't it much easier to just say
 
->   *"`Scanning.scanObject` accepts it because it visits edges."*
+>   *"`Scanning.scanObject` accepts it as a callback argument because it visits
+>   edges."*
 
 ### The nature of interfaces.
 
@@ -1000,11 +1004,12 @@ elements.  The closure receives the object.  That is the contract of the
 `foreach` method.  Whether it prints the element or how it prints the element is
 not part of the contract.
 
-So "Enumerator" was a right name.  It correctly describes the purpose of the
-object, that is, *"it enumerates fields"*, nothing more.  That's all what
-`Scanning.scanObject` need to care about.  It passes each field to the callback,
-and that's it.  It should not assume what that callback object is.  Whether it
-is a `TraceLocal` or an RC operation is beyond its obligation.
+So "Enumerator" was a right name.  It correctly describes the role of the object
+in a `scanObject` invocation, that is, *"it enumerates fields"*, nothing more.
+That's all what `Scanning.scanObject` need to care about.  It passes each field
+to the callback, and that's it.  It should not assume what that callback object
+does to each edge.  Whether it is a `TraceLocal` or an RC operation is beyond
+its obligation.
 
 "TraceStep" was wrong.  "TransitiveClosure" was also wrong.  Neither of them
 is what `Scanning.scanObject` cares about.
