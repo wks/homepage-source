@@ -1249,6 +1249,37 @@ things like this, things that have remained in its current state for years, or
 even decades.  But this doesn't mean they are always right.  We have to rethink
 about the code again and again, and fix the problems whenever we can.
 
+## Update
+
+We eventually [removed][remove-tc-pr] `TransitiveClosure` as well as the stale
+`TraceLocal` trait from `mmtk-core`.  However, unlike we discussed in previous
+sections, we did not remove the `trace` parameter from `trace_object`.  We think
+"enqueuing objects" is still a responsibility of the `trace_object` method, so
+we should still enqueue objects in `trace_object` instead of in `process_edges`
+using the return value.  Therefore, we simply renamed `TransitiveClosure` to
+`ObjectQueue`, and renamed `process_node` to `enqueue`, so they indicate exactly
+what they do.  And now it is the actual object queue instead of
+`ProcessEdgesWork` that implements `ObjectQueue`.
+
+The signature of `CopySpace::trace_object` now looks like this:
+
+```rust
+#[inline(always)]
+pub fn trace_object<Q: ObjectQueue>(
+    &self,
+    queue: &mut Q,
+    object: ObjectReference,
+    semantics: Option<CopySemantics>,
+    worker: &mut GCWorker<VM>,
+) -> ObjectReference {
+```
+
+Note that `ObjectQueue` is still a trait.  It does not have to be a physical
+queue.  If a GC algorithm does not hold objects in a queue during tracing, it
+can implement this trait and process the "enqueued" object immediatey.
+
+[remove-tc-pr]: https://github.com/mmtk/mmtk-core/pull/607
+
 ## See also
 
 The tracking issue: https://github.com/mmtk/mmtk-core/issues/559
