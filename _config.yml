@@ -32,6 +32,7 @@ github_username:  wks
 theme: jekyll-theme-hacker
 plugins:
   - jekyll-feed
+  - jekyll_include_plugin
 
 # Without this, if I publish a blog in China, the GitHub Actions server in the
 # US may think the date is in the future. LOL :)

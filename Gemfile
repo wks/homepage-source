@@ -32,3 +32,5 @@ gem "wdm", "~> 0.1.1", :platforms => [:mingw, :x64_mingw, :mswin]
 # Ruby 3.0 no longer has Webrick bunded.
 gem "webrick"
 
+# For including source code directly.
+gem 'jekyll_include_plugin'
