@@ -187,11 +187,12 @@ the `co_await` expression.
 >   *-- [Zen of Python]*
 
 From Python's official language reference and [PEP 492][py-pep492], it looks
-like the new async/await mechanism is intended for a very specific scenario
-where multiple "coroutines" are scheduled by a kind of "event loop".  This
-violates the characterestic of coroutine that coroutine switching is part of the
-control flow.  This makes Python "coroutines" more similar to a variant of
-"goroutines" that leaks the abstraction of task-switching.
+like the new async/await mechanism is intended for asynchronous programming (see
+appendex), a very specific scenario where multiple "coroutines" are scheduled by
+a kind of "event loop".  This violates the characterestic of coroutine that
+coroutine switching is part of the control flow.  This makes Python "coroutines"
+more similar to a variant of "goroutines" that leaks the abstraction of
+task-switching.
 
 And the user almost always use async/await with the [`asyncio`][py-asyncio]
 module.  I don't think it is good to introduce a **language feature** that is
@@ -272,6 +273,93 @@ own `parent` variable to record the parent.
 {% include_file blog/_code/coroutine/coro-greenlet-a.py %}
 {% endhighlight %}
 
+
+## Rust async/await (stackless, asymmetric, not designed for coroutine)
+
+Rust's `async` and `await` keywords are designed for asynchronous programming
+(see appendix).  There is [a dedicated book][rust-async-book] that covers
+asynchronous programming in Rust.
+
+Like Python generator functions, an [`async` function][rust-async-func] or an
+[`async` block][rust-async-block], when executed, do not execute their bodies
+immediately.  Instead, they create a `Future` object that holds the execution
+context of that function or block.  The `Future::poll` method will let it run
+until it yields (on an `await` site) or finishes.
+
+The [`await` expression][rust-await] can only be used in one `async` thing to
+wait for another `async` thing to finish.  It "polls" the other `async` and, if
+the other `async` finished, it continues;  otherwise, it yields from current
+`async`, and the current `async` can be resumed later.  From this perspective,
+an `async` thing is a coroutine (underneath), and `await` is a conditional
+yield.
+
+Implementation-wise, [the documentation suggests][rust-async-state-machine] that
+Rust decomposes an `async` function (or block) into a state machine where each
+state represents an `await` site.  Each time it is "polled", it runs to the next
+*pending* await site.
+
+**Async/await is not supposed to be used like coroutines** as we discussed in
+this post.  In fact, the book [Asynchronous Programming in
+Rust][rust-async-book] contrasts async/await against coroutines and [claims it
+has advantages over coroutines][rust-async-vs-coroutine].
+
+However, it is possible to abuse the async/await mechanism to exploit its
+underlying coroutine. We need to call `Future::poll` directly, which is seldom
+done in practice unless we are implementing the "executor".  We will invoke an
+`async` function recursively to traverse our nested list.  Every time we visit a
+number, we write the number in a shared variable (note that "yielding" in an
+async/await framework is not for producing partial results to the invoker), and
+`await` until the consumer writes another shared variable to indicate "it has
+read the value".  This `ResultReporter` struct effectively behaves like a
+zero-capacity channel.  The sender can only continue after the receiver takes
+the value.
+
+[rust-async-book]: https://rust-lang.github.io/async-book/
+[rust-async-func]: https://doc.rust-lang.org/reference/items/functions.html#async-functions
+[rust-async-block]: https://doc.rust-lang.org/reference/expressions/block-expr.html#async-blocks
+[rust-async-statemachine]: https://rust-lang.github.io/async-book/01_getting_started/04_async_await_primer.html
+[rust-async-vs-coroutine]: https://rust-lang.github.io/async-book/01_getting_started/02_why_async.html#async-vs-other-concurrency-models
+[rust-await]: https://doc.rust-lang.org/reference/expressions/await-expr.html
+
+{% highlight rust linenos %}
+{% include_file blog/_code/coroutine/coro-async.rs %}
+{% endhighlight %}
+
+
+## Rust coroutine crate (stackful, asymmetric)
+
+The third-part crate [`coroutine`][rust-coroutine] provides stackful asymmetric
+coroutines.  It is built upon the `context` crate (see below).
+
+It looks like this crate has not been maintained for quite some time.  It
+depends on a deprecated feature `FnBox` which no longer exists in the current
+toolchains.  I'll not do the task using the `coroutine` crate.
+
+[rust-coroutine]: https://docs.rs/coroutine/latest/coroutine/
+
+
+## Rust context crate (stackful, symmetric)
+
+The third-part crate [`context`][rust-context] is similar to [Boost Context]. It
+provides the abstraction of stackful symmetric coroutines.
+
+It implements swap-stack using machine-specific assembly code
+([x86-64][rust-context-x86-64], [AArch64][rust-context-arm64],
+[ppc64][rust-context-ppc64], sorry RISC-V).
+
+The [`Context::resume`][rust-context-resume] method switches the thread to the
+other coroutine, and pass the context of the original coroutine so the thread
+can switch back.
+
+[rust-context]: https://docs.rs/context/latest/context/index.html
+[rust-context-x86-64]: https://github.com/zonyitoo/context-rs/blob/master/src/asm/jump_x86_64_sysv_elf_gas.S
+[rust-context-arm64]: https://github.com/zonyitoo/context-rs/blob/master/src/asm/make_arm64_aapcs_elf_gas.S
+[rust-context-ppc64]: https://github.com/zonyitoo/context-rs/blob/master/src/asm/jump_ppc64_sysv_elf_gas.S
+[rust-context-resume]: https://docs.rs/context/latest/context/context/struct.Context.html#method.resume
+
+{% highlight rust linenos %}
+{% include_file blog/_code/coroutine/coro-context.rs %}
+{% endhighlight %}
 
 # Appendices
 
