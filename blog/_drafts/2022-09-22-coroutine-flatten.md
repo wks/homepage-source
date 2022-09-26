@@ -274,7 +274,85 @@ own `parent` variable to record the parent.
 {% endhighlight %}
 
 
-## Rust async/await (stackless, asymmetric, not designed for coroutine)
+## JavaScript generators (stackless, asymmetric)
+
+The [`function*`][js-functionstar] declaration defines a [generator
+function][js-generator]. Generator functions can have `yield` operator that
+pauses the execution of the coroutine.
+
+When a generator function called, it creates a generator object.  It can be used
+like an iterator.  The [`next`][js-next] method switches to the coroutine.
+
+[js-functionstar]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/function*
+[js-generator]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Generator
+[js-yield]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/yield
+[js-next]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Iteration_protocols#the_iterator_protocol
+
+{% highlight js linenos %}
+{% include_file blog/_code/coroutine/coro-gen.js %}
+{% endhighlight %}
+
+And there are syntax sugars.  The [`yield*`][js-yieldstar] operator yields
+everything from another generator.  Because a generator behaves like an
+iterator, the `for-of` statement can iterate through the values it yields.
+
+{% highlight js linenos %}
+{% include_file blog/_code/coroutine/coro-gen-sugar.js %}
+{% endhighlight %}
+
+[js-yieldstar]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/yield*
+
+
+## JavaScript async/await (stackless, asymmetric, asynchronous)
+
+JavaScript provides asynchronous programming facilities in the form of
+async/await.  An [`async` function][js-async-func] always returns a
+[`Promise`][js-promise] object which can be settled (fulfilled or rejected)
+later.  An `async` function may contain [`await` operators][js-await] which
+cause async function execution to pause until its operand (a `Promise`) is
+settled, and resume execution after fulfillment.
+
+Asynchronous programming is more like cooperative multi-tasking than coroutines.
+Although `await` is usually implemented with a "conditional yield" that only
+yields if the `Promise` is not settled, it is used for waiting for an event to
+happen, not for producing values like the `yield` operator in the "generator"
+use case above does.
+
+Despite the difference, I now give an example of implementing nested list
+traversal using async/await.  I create two concurrent tasks, one for traversing
+the nested list, and the other prints the numbers, and I use a "zero-capacity
+queue" to allow them to communicate.  It is similar to multi-thread programming,
+except there is only one thread, and the execution is scheduled by a scheduler.
+
+[js-async-func]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/async_function
+[js-promise]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise
+[js-await]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/await
+
+{% highlight js linenos %}
+{% include_file blog/_code/coroutine/coro-async.js %}
+{% endhighlight %}
+
+
+## JavaScript async generators (stackless, asymmetric, asynchronous)
+
+Functions annotated with `async function*` defines an async generator function.
+An [async generator][js-async-generator] is like a generator, but the `.next()`
+method returns a `Promise` so it can be awaited.  This allows the generator to
+use `await` while iterating.  It can also use the [`for await ... of`
+statement][js-for-await-of] as a syntax sugar.
+
+This practice is like building coroutine on top of async/await on top of
+coroutine, which looks ugly to me.  Anyway, here is the code:
+
+[js-async-generator]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/AsyncGenerator
+[js-for-await-of]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/for-await...of
+
+{% highlight js linenos %}
+{% include_file blog/_code/coroutine/coro-async-gen.js %}
+{% endhighlight %}
+
+
+## Rust async/await (stackless, asymmetric, asynchronous)
 
 Rust's `async` and `await` keywords are designed for asynchronous programming
 (see appendix).  There is [a dedicated book][rust-async-book] that covers
@@ -360,6 +438,32 @@ can switch back.
 {% highlight rust linenos %}
 {% include_file blog/_code/coroutine/coro-context.rs %}
 {% endhighlight %}
+
+
+## C# iterators (stackless, asymmetric)
+
+C# can implement iterators using the `yield return` or `yield break` statements.
+A function that contains [`yield`][csharp-yield] returns an `Enumerable<T>` or
+`Enumerator<T>` that makes progress every time an item is requested.
+
+[csharp-yield]: https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/keywords/yield
+
+{% highlight csharp linenos %}
+{% include_file blog/_code/coroutine/coro-iter.cs %}
+{% endhighlight %}
+
+
+## C# async/await (stackless, asymmetric, asynchronous)
+
+C# supports [asynchronous programming][csharp-async-prog].  Like async/await in
+any other language, its programming model is different from coroutines.  It is
+possible to implement asynchronous traversal using an
+[AsyncQueue][csharp-async-queue] to communicate between the traversal task and a
+consumer task that consumes the visited values.  I am not going to give an
+example here.
+
+[csharp-async-prog]: https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/concepts/async/
+[csharp-async-queue]: https://learn.microsoft.com/en-us/dotnet/api/microsoft.visualstudio.threading.asyncqueue-1?view=visualstudiosdk-2022
 
 # Appendices
 
