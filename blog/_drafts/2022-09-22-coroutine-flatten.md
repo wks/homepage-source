@@ -5,17 +5,19 @@ tags: coroutine,rosettacode
 excerpt_separator: <!--more-->
 ---
 
-I'll try to use **coroutines** to flatten nested lists, Rosetta Code stlye. That
+I'll try to use **coroutines** to flatten nested lists, Rosetta Code style. That
 means I'll do it in many different programming languages and libraries,
-including Ruby, Lua, Python (including greenlets), etc.  This task shows the
-difference between *symmetric* vs *asymmetric* coroutines, and *stackful* vs
-*stackless* coroutines.
+including Ruby, Lua, Python (including greenlets), JavaScript, Rust, C#, etc.
+This task shows the difference between *symmetric* vs *asymmetric* coroutines,
+and *stackful* vs *stackless* coroutines.
 
 Note that this post alone may not be enough to teach you how to use coroutines
 in all those languages.
 
-<!--more-->
+I'll also discuss topics like coroutines, swap-stack, async/await, etc. in the
+appendices.
 
+<!--more-->
 
 # The task
 
@@ -121,7 +123,7 @@ coroutine, and [`coroutine.yield`] jumps back to the calling coroutine.
 {% include_file blog/_code/coroutine/coro-a.lua %}
 {% endhighlight %}
 
-The [`coroutine.wrap`] function can wrap the coroutine into an interator
+The [`coroutine.wrap`] function can wrap the coroutine into an iterator
 function suitable for the [generic `for` statement][lua-for].
 
 [`coroutine.wrap`]: http://www.lua.org/manual/5.4/manual.html#pdf-coroutine.wrap
@@ -171,32 +173,18 @@ following:
 
 ## Python coroutines (WTF?)
 
-Python 3.5 introduced the so-called "[coroutine][py-coroutine]" function, using
-the syntax `async def foo(...)`.  Like generator, calling a "coroutine function"
-creates a coroutine object.  Inside a coroutine function, it can `yield`, but
-not `yield from`.
-
-Python coroutines support a new [`await`][py-await] expression, but its
-semantics is [very vaguely defined][py-await] as "suspend the execution of
-coroutine on an awaitable object", whatever "on an awaitable object" means. That
-is in stark contrast to [C++20's highly detailed semantics][c++20-coawait] of
-the `co_await` expression.
+Python 3.5 attempts to introduce async/await-based asynchronous programming
+mechanisms, but it used the word "[coroutine][py-coroutine]" to refer to
+functions annotated with the `async` keyword, like `async def foo(...)`.  Async
+functions can use the new [`await`][py-await] expression, but its semantics is
+[very vaguely defined][py-await] as "suspend the execution of coroutine on an
+awaitable object", whatever "on an awaitable object" means. That is in stark
+contrast to the highly detailed semantics of [`co_await` expression in
+C++20][c++20-coawait] and the [`.await` expression in Rust][rust-await].
 
 >   In the face of ambiguity, refuse the temptation to guess.
 >
 >   *-- [Zen of Python]*
-
-From Python's official language reference and [PEP 492][py-pep492], it looks
-like the new async/await mechanism is intended for asynchronous programming (see
-appendex), a very specific scenario where multiple "coroutines" are scheduled by
-a kind of "event loop".  This violates the characterestic of coroutine that
-coroutine switching is part of the control flow.  This makes Python "coroutines"
-more similar to a variant of "goroutines" that leaks the abstraction of
-task-switching.
-
-And the user almost always use async/await with the [`asyncio`][py-asyncio]
-module.  I don't think it is good to introduce a **language feature** that is
-only useful to one module.
 
 Because it is so confusing, I am not going to do the task using Python
 "coroutines".
@@ -224,7 +212,7 @@ greenlet is currently paused*".
 
 Greenlets are symmetric.  One greenlet can switch to another using the
 [`glet.switch()`][greenlet-switch] method to pass a value, or
-[`glet.throw()`][greenlet-throw] to switch and immeidately raise an exception.
+[`glet.throw()`][greenlet-throw] to switch and immediately raise an exception.
 
 Implementation-wise, the official greenlet uses platform-specific assembly code
 (for [amd64][greenlet-asm-amd64], [aarch64][greenlet-asm-aarch64],
@@ -306,17 +294,13 @@ iterator, the `for-of` statement can iterate through the values it yields.
 ## JavaScript async/await (stackless, asymmetric, asynchronous)
 
 JavaScript provides asynchronous programming facilities in the form of
-async/await.  An [`async` function][js-async-func] always returns a
+async/await (see appendix).  An [`async` function][js-async-func] always returns a
 [`Promise`][js-promise] object which can be settled (fulfilled or rejected)
 later.  An `async` function may contain [`await` operators][js-await] which
 cause async function execution to pause until its operand (a `Promise`) is
-settled, and resume execution after fulfillment.
+settled, and resume execution after fulfilment.
 
 Asynchronous programming is more like cooperative multi-tasking than coroutines.
-Although `await` is usually implemented with a "conditional yield" that only
-yields if the `Promise` is not settled, it is used for waiting for an event to
-happen, not for producing values like the `yield` operator in the "generator"
-use case above does.
 
 Despite the difference, I now give an example of implementing nested list
 traversal using async/await.  I create two concurrent tasks, one for traversing
@@ -354,43 +338,48 @@ coroutine, which looks ugly to me.  Anyway, here is the code:
 
 ## Rust async/await (stackless, asymmetric, asynchronous)
 
-Rust's `async` and `await` keywords are designed for asynchronous programming
-(see appendix).  There is [a dedicated book][rust-async-book] that covers
-asynchronous programming in Rust.
+Rust's `async` and `await` keywords provides support for asynchronous
+programming (see appendix) based on stackless asymmetric coroutines.  There is
+[a dedicated book][rust-async-book] that covers asynchronous programming in
+Rust.
 
-Like Python generator functions, an [`async` function][rust-async-func] or an
-[`async` block][rust-async-block], when executed, do not execute their bodies
-immediately.  Instead, they create a `Future` object that holds the execution
-context of that function or block.  The `Future::poll` method will let it run
-until it yields (on an `await` site) or finishes.
+An [`async` function][rust-async-func] or an [`async` block][rust-async-block],
+when executed, do not execute their bodies immediately, but creates an object
+that holds the execution context of that function or block.  Each async function
+or block is represented to the user as a `Future`.  The `Future::poll` method
+will resume the async thing until it yields (on an `await` site) or finishes.
 
-The [`await` expression][rust-await] can only be used in one `async` thing to
-wait for another `async` thing to finish.  It "polls" the other `async` and, if
-the other `async` finished, it continues;  otherwise, it yields from current
-`async`, and the current `async` can be resumed later.  From this perspective,
-an `async` thing is a coroutine (underneath), and `await` is a conditional
-yield.
+The [`await` expression][rust-await] can only be used in `async` functions or
+blocks.  Its semantics is [complicated but well-defined][rust-await]. It calls
+`Future::poll` on a `Future` object and, if the `Future` is ready, it grabs its
+value continues without yielding; otherwise, it yields from the current `async`
+function or block.  When resumed, it will poll the `Future` again and may or may
+not yield depending on whether the `Future` is ready.
 
 Implementation-wise, [the documentation suggests][rust-async-state-machine] that
 Rust decomposes an `async` function (or block) into a state machine where each
-state represents an `await` site.  Each time it is "polled", it runs to the next
-*pending* await site.
+state represents an `await` site.
 
-**Async/await is not supposed to be used like coroutines** as we discussed in
-this post.  In fact, the book [Asynchronous Programming in
-Rust][rust-async-book] contrasts async/await against coroutines and [claims it
-has advantages over coroutines][rust-async-vs-coroutine].
+Async/await is not supposed to be used like coroutines.  In fact, the book
+Asynchronous Programming in Rust [contrasts async/await against
+coroutines][rust-async-vs-coroutine].  I have given an example in JavaScript
+that traverses nested list using async/await using two tasks and a channel.  It
+is possible to do the same in Rust, but that'll need a scheduler.  Since I am
+too lazy to write a scheduler or introduce a third-party scheduler, I'll try a
+different approach here.
 
-However, it is possible to abuse the async/await mechanism to exploit its
-underlying coroutine. We need to call `Future::poll` directly, which is seldom
-done in practice unless we are implementing the "executor".  We will invoke an
-`async` function recursively to traverse our nested list.  Every time we visit a
-number, we write the number in a shared variable (note that "yielding" in an
-async/await framework is not for producing partial results to the invoker), and
-`await` until the consumer writes another shared variable to indicate "it has
-read the value".  This `ResultReporter` struct effectively behaves like a
-zero-capacity channel.  The sender can only continue after the receiver takes
-the value.
+I'll abuse the async/await mechanism to exploit its underlying coroutine.  We
+know that `Future::poll` resumes the coroutine.  We call `Future::poll`
+directly, which is seldom done in practice unless we are implementing the
+"executor" (i.e. scheduler).  The `async fn traverse` will recursively call
+itself in the `.await` expression.  When it yields in the middle of execution,
+it yields level by level through all the `.await` sites to the main function,
+but the value it yields is always `Poll::Pending`.  To work around this, every
+time we visit a number, we write the number in a shared variable
+`result_reporter.num`.  We use another shared variable
+`result_reporter.result_taken` to indicate whether the `.await` should continue.
+This `ResultReporter` struct effectively behaves like a zero-capacity channel,
+but the communicating parties are the coroutine and the main function.
 
 [rust-async-book]: https://rust-lang.github.io/async-book/
 [rust-async-func]: https://doc.rust-lang.org/reference/items/functions.html#async-functions
@@ -411,7 +400,8 @@ coroutines.  It is built upon the `context` crate (see below).
 
 It looks like this crate has not been maintained for quite some time.  It
 depends on a deprecated feature `FnBox` which no longer exists in the current
-toolchains.  I'll not do the task using the `coroutine` crate.
+version of compiler.  I'll not do the task using the `coroutine` crate.  If you
+are interested, their documentation contains some examples.
 
 [rust-coroutine]: https://docs.rs/coroutine/latest/coroutine/
 
@@ -472,14 +462,14 @@ example here.
 The purpose of this task is to compare *symmetric*, *asymmetric*, *stackful* and
 *stackless* coroutines.
 
-This task is natual to implement with coroutines.  It is a "generator",
+This task is natural to implement with coroutines.  It is a "generator",
 something that gives out a sequence of values as it executes.  It is natural to
 have one coroutine that gives out the values, and another coroutine to consume
 the values, and the two can run in alternation.
 
 This task is also much easier with stackful coroutines than stackless
 coroutines.  It is easier to traverse a recursive data structure using
-recursoin, and recursion needs a stack.  Stackful coroutines can handle the
+recursion, and recursion needs a stack.  Stackful coroutines can handle the
 stack quite trivially, but when using stackless coroutines, we have to do some
 hack and chain up multiple coroutines to form a stack of coroutines, and yield
 values through multiple layers of coroutines.
@@ -491,7 +481,7 @@ which communicates with adjacent modules as if they were input or output
 subroutines*".  Coroutines are subroutines all at the same level, each acting as
 if it were the master program when in fact there is no master program.
 
-Coroutines has the following characterestics. (See [*Coroutines in
+Coroutines has the following characteristics. (See [*Coroutines in
 Lua*][MRI04])
 
 1.  The values of data local to a coroutine persist between successive calls.
@@ -499,9 +489,9 @@ Lua*][MRI04])
     carry on where it left off when control re-enters the coroutine at some
     later stage.
 
-The first characterestic means coroutines can be resumed from where it paused.
+The first characteristic means coroutines can be resumed from where it paused.
 
-In the second characterestic, "as control leaves it" means it is the programmer
+In the second characteristic, "as control leaves it" means it is the programmer
 that decides *where* to pause a coroutine, not the implicit scheduler.  Control
 flow is part of a program, not the runtime.
 
@@ -688,12 +678,13 @@ void interpret_function(Frame *initial_frame) {
 A stackless interpreter always remains in the single `interpret_function`
 function activation even when the interpreted language program makes a call.
 Swap-stack is relatively easier to implement with stackless interpreter,
-because it does not need ot swap out any C frames...
+because it does not need to swap out any C frames...
 
 ... unless it allows foreign function calls.  If the stackless interpreter
-allows the interpretd language to call foreign C functions, then C functions
+allows the interpreted language to call foreign C functions, then C functions
 must have frames on some stack.  Then we face the same problem as implementing
 swap-stack for compiled languages.
+
 
 ### The Mu micro virtual machine
 
@@ -709,6 +700,83 @@ other VM mechanisms, such as trapping and [on-stack replacement
 [phd-thesis]: https://wks.github.io/downloads/pdf/wang-thesis-2018.pdf
 [phd-thesis-swapstack]: https://wks.github.io/downloads/pdf/wang-thesis-2018.pdf#subsection.5.3.6
 [osr-paper]: https://wks.github.io/downloads/pdf/osr-vee-2018.pdf
+
+
+## Asynchronous programming (async/await) and coroutines
+
+In asynchronous programming, a program consists of many tasks that can be
+completed in the future, and one task can wait for other tasks to complete
+before continuing.  There are many ways to implement asynchronous programming.
+It can be trivially executed inline (e.g. the X10 compiler is [allowed to
+inline][x10-async] an async activity), executed sequentially, using threads, or
+using coroutines.
+
+The notion of "Future" and its friend "Promise" are well-known in multi-thread
+programming ([C++][cpp-future], [Java][java-future], [C#][csharp-future] and
+[Python][python-future]).  A pair of Future and Promise represents a value yet
+to be produced.  The Future waits for the value to be produced, and the Promise
+is a place to store the value to be acquired via the Future.  C++ even has the
+[`std::async`][cpp-std-async] function in the standard library to launch an
+asynchronous task in a new thread.
+
+Recently many programming languages employed a style of asynchronous programming
+language based on coroutines in the form of async/await.  I guess the reason
+behind its gaining popularity is two fold:
+
+1.  Native, OS-provided threads are too heavy-weight, but not many programming
+    languages support light-weight "M\*N" green threads, that is, M OS threads
+    are multiplexed to run N application-level threads and N >> M.  AFAIK, only
+    Erlang and Go supports such light-weight threads.
+
+2.  Not many languages support stackful coroutines.  As we discussed before,
+    stackful coroutines are only practical with swap-stack. Some languages (such
+    as Kotlin) are targeted to runtimes (such as JVM) that don't support
+    swap-stack.
+
+As a compromise, some languages resorted to coroutines.  They attempted to
+implement cooperative multi-tasking using coroutines that yield when they are
+about to block, and a scheduler that decides which coroutine can continue
+without blocking.  And there is async/await.
+
+A function can be annotated with the `async` keyword.  An async function is
+like a Python generator.  When called, it doesn't execute the body of the
+function immediately, but will create an object that holds the execution context
+of the function, like a frame.  An async function may contain `await`
+expressions.  An `await` is like a conditional `yield`.  If a given `Future` is
+ready, then grab the value and continue; otherwise, suspend the execution and
+give control to the scheduler so that it can find something else to execute.
+
+Async and await gives the programmer the feeling of multi-thread programming
+except that the programmer must explicitly annotate places that may
+*potentially* yield with `await`.
+
+You can find an async/await example in JavaScript earlier in this post.  It
+looks pretty like two threads communicating with each other using a channel.
+
+### Consequence of being stackless
+
+Without proper swap-stack support, the compiler has to implement coroutines by
+decomposing `async` functions into state machines.  `await` expressions are
+places the function may yield, and each `await` represents a state in the state
+machine.
+
+However, async/await is not the only way to implement cooperative multi-task
+programming on top of coroutines.  [gevent] is a Python framework based on
+[Greenlets][greenlet] which implement symmetric coroutines.  With the ability to
+switch coroutine at any level of stack, each coroutine can yield to the
+scheduler as part of potentially blocking functions (such as sleeping, IO
+operations, etc.), and programmers do not need to annotate any expression with
+`await`.
+
+
+[x10-async]: https://x10.sourceforge.net/documentation/intro/latest/html/node4.html#SECTION00410000000000000000
+[cpp-future]: https://docs.oracle.com/en/java/javase/18/docs/api/java.base/java/util/concurrent/Future.html
+[java-future]: https://en.cppreference.com/w/cpp/thread/future
+[csharp-future]: https://learn.microsoft.com/en-us/cpp/standard-library/future-class
+[python-future]: https://docs.python.org/3/library/concurrent.futures.html#future-objects
+[cpp-std-async]: https://en.cppreference.com/w/cpp/thread/async
+[gevent]: http://www.gevent.org/index.html
+
 
 <!--
 vim: tw=80
