@@ -53,9 +53,11 @@ greatly w.r.t. the design of coroutines.
 [Fibers][ruby-fiber] are "primitives for implementing light weight cooperative
 concurrency in Ruby".
 
-Ruby fibers are stackful.  According to the [doc][ruby-fiber], "each fiber comes
-with a stack. This enables the fiber to be paused from deeply nested function
-calls within the fiber block".
+Ruby fibers are stackful.  According to the [documentation][ruby-fiber]:
+
+> As opposed to other stackless light weight concurrency models, each fiber
+> comes with a stack. This enables the fiber to be paused from deeply nested
+> function calls within the fiber block.
 
 Ruby fibers can operate in both asymmetric and symmetric mode.  I'll demonstrate
 the task in both modes below.
@@ -68,17 +70,17 @@ The [`Fiber#resume`] instance method resumes a fiber, and a subsequent call to
 the [`Fiber.yield`] class method jumps back to the resumer.
 
 [`Fiber#resume`]: https://ruby-doc.org/core-3.1.2/Fiber.html#method-i-resume
-[`Fiber::yield`]: https://ruby-doc.org/core-3.1.2/Fiber.html#method-c-yield
+[`Fiber.yield`]: https://ruby-doc.org/core-3.1.2/Fiber.html#method-c-yield
 
 {% highlight ruby linenos %}
 {% include_file blog/_code/coroutine/coro-a.rb %}
 {% endhighlight %}
 
-However, it is more natural to use the [`Enumerator`][ruby-enumerator] class to
-automatically transform block-based call-back function into a fiber-based
-coroutine.  It only uses fiber when the enumerator is used as an external
-iterator (calling `e.next` repeatedly).  It still uses call-back for internal
-iteration (`e.each { |v| ... }`).
+The [`Enumerator`][ruby-enumerator] class can automatically transform
+block-based visiting functions into fiber-based coroutine.  It uses fiber only
+when necessary.  It uses fiber when used as external iterators (calling `e.next`
+explicitly), but still uses call-back for internal iteration (`e.each { |v| ...
+}`).
 
 [ruby-enumerator]: https://ruby-doc.org/core-3.1.2/Enumerator.html
 
@@ -101,19 +103,37 @@ when we create it, so it can remember which fiber to transfer back to.
 ## Lua threads (stackful, asymmetric)
 
 Lua "threads" are stackful coroutines.  Lua has a stackless interpreter,
-therefore it can easily implement stackful coroutines.  (See appendix)
+therefore it can easily implement stackful coroutines (Why? See
+[appendix](#apdx-sisc)).
 
-Lua provides asymmetric coroutines for the sake of *simplicity* and
-*portability*.
+Lua provides asymmetric coroutines (with limitations) for the sake of
+*simplicity* and *portability*.
 
--   According to [*Coroutines in Lua*][MRI04], asymmetric coroutines behave like
-    routines in the sense that the control is always transferred back to their
-    callers, and is therefore easier to understand by even novice programmers.
+-   **Simplicity**: According to [*Coroutines in Lua*][MRI04], asymmetric
+    coroutines may be easier to understand.
 
--   Because Lua and C functions can call each other, Lua also added a limitation
-    to its stackful coroutines: *a coroutine cannot yield while there are C
-    function frames on its stack*.  Otherwise, Lua would require a "swap-stack"
-    mechanism for C, and that will make it less portable.
+    > On the other hand, asymmetric coroutines truly behave like routines, in
+      the sense that control is always transferred back to their callers. Since
+      even novice programmers are familiar with the concept of a routine,
+      control sequencing with asymmetric coroutines seems much simpler to manage
+      and understand, besides allowing the development of more structured
+      programs
+
+-   **Portability**: Supporting symmetric coroutines (or even proper stackful
+    asymmetric coroutines) will require C to have coroutine facilities, such as
+    [swap-stack], which is not always available. According to [*Coroutines in
+    Lua*][MRI04]:
+
+    > Lua and C code can freely call each other; therefore, an application can
+      create a chain of nested function calls wherein the languages are
+      interleaved. Implementing a symmetric facility in this scenario imposes
+      the preservation of C state when a Lua coroutine is suspended. This
+      preservation is only possible if a coroutine facility is also provided for
+      C; but a portable implementation of coroutines for C cannot be written. 
+
+    Lua also added a limitation: *a coroutine cannot yield while there are C
+    function frames on its stack*.  Otherwise, Lua would require a [swap-stack]
+    mechanism for C, making Lua less portable.
 
 In Lua, the [`coroutine.resume`] function continues the execution of a
 coroutine, and [`coroutine.yield`] jumps back to the calling coroutine.
@@ -140,16 +160,16 @@ function suitable for the [generic `for` statement][lua-for].
 Python generators are a built-in feature since Python 2.x.  They are
 single-frame coroutines.
 
-Being stackless, it is not allowed to yield from another frame than the
-coroutine's frame itself.  In fact, it is syntactically impossible to do so,
-because any function that contains a [`yield`][py-yieldexpr] keyword is
-considered a generator function.  Calling a generator function will create a new
-generator stopped at the beginning of the function, and can be resumed with the
+A function that contains a [`yield`][py-yieldexpr] keyword is considered a
+generator function.  Calling a generator function will create a new generator
+object stopped at the beginning of the function, and can be resumed with the
 [`next(...)`][py-next] built-in function.
 
-To implement recursive traversal with stackless coroutines, it is common to
-create one generator for each level of nested list, and yield values from
-inside out, level by level.
+Being stackless, each coroutine has only one frame, so it cannot yield while
+calling another function.  To implement recursive traversal with stackless
+coroutines, it is common to create one generator for each level of nested list,
+and yield values from the innermost coroutine to the outer coroutine, level by
+level.
 
 [py-yieldexpr]: https://docs.python.org/3/reference/expressions.html#grammar-token-python-grammar-yield_expression
 [py-next]: https://docs.python.org/3/library/functions.html#next
@@ -175,14 +195,15 @@ following:
 
 ## Python coroutines (WTF?)
 
-Python 3.5 attempts to introduce async/await-based asynchronous programming
+Python 3.5 attempts to introduce [async/await]-based asynchronous programming
 mechanisms, but it used the word "[coroutine][py-coroutine]" to refer to
-functions annotated with the `async` keyword, like `async def foo(...)`.  Async
-functions can use the new [`await`][py-await] expression, but its semantics is
-[very vaguely defined][py-await] as "suspend the execution of coroutine on an
-awaitable object", whatever "on an awaitable object" means. That is in stark
-contrast to the highly detailed semantics of [`co_await` expression in
-C++20][c++20-coawait] and the [`.await` expression in Rust][rust-await].
+functions annotated with the `async` keyword, like `async def foo(...)`, which
+is confusing.  Async functions may contain the new [`await`][py-await]
+expression, but its semantics is [very vaguely defined][py-await] as "suspend
+the execution of coroutine on an awaitable object", whatever "on an awaitable
+object" means. That is in stark contrast to the highly detailed semantics of
+[`co_await` expression in C++20][c++20-coawait] and the [`.await` expression in
+Rust][rust-await].
 
 >   In the face of ambiguity, refuse the temptation to guess.
 >
@@ -203,30 +224,32 @@ Because it is so confusing, I am not going to do the task using Python
 
 ### Symmetric
 
-The third-party library [greenlet] provides stackful symmetric coroutines for
-CPython and PyPy.
+The [greenlet] library provides stackful symmetric coroutines.
 
-Greenlets are stackful.  According to the [documentation][greenlet-concept], a
-"greenlet" is "*a small independent pseudo-thread*", something that can be
-"*thought about as a small stack of frames; the outermost (bottom) frame is the
-initial function you called, and the innermost frame is the one in which the
-greenlet is currently paused*".
+Greenlets are stackful.  According to the [documentation][greenlet-concept]:
+
+> A “greenlet” is a small independent pseudo-thread. Think about it as a small
+> stack of frames; the outermost (bottom) frame is the initial function you
+> called, and the innermost frame is the one in which the greenlet is currently
+> paused.
 
 Greenlets are symmetric.  One greenlet can switch to another using the
 [`glet.switch()`][greenlet-switch] method to pass a value, or
 [`glet.throw()`][greenlet-throw] to switch and immediately raise an exception.
 
-Implementation-wise, the official greenlet uses platform-specific assembly code
-(for [amd64][greenlet-asm-amd64], [aarch64][greenlet-asm-aarch64],
+There are implementations of Greenlets for both CPython and PyPy.
+
+The official greenlet implementation for CPython uses platform-specific assembly
+code (for [amd64][greenlet-asm-amd64], [aarch64][greenlet-asm-aarch64],
 [riscv][greenlet-asm-riscv], etc.) to switch native stacks, similar to what
 [Boost Context] does.
 
 PyPy [implements the greenlet API][pypy-greenlet] using
-[stacklets][pypy-stacklet], which is PyPy's own swap-stack mechanism.  Like
-[Boost Context] and [greenlet], PyPy also uses platform-specific assembly code
-to switch between stacks.  (See the code for [x86-64][pypy-stacklet-x86-64],
+[stacklets][pypy-stacklet], which are PyPy's own swap-stack mechanism.  Like
+[Boost Context] and the official greenlet for CPython, PyPy also uses
+platform-specific assembly code (for [x86-64][pypy-stacklet-x86-64],
 [aarch64][pypy-stacklet-aarch64], [mips64][pypy-stacklet-mips64], etc.  Sorry,
-RISC-V.)
+RISC-V.) to switch between stacks.
 
 [greenlet]: https://greenlet.readthedocs.io/en/latest/index.html
 [greenlet-concept]: https://greenlet.readthedocs.io/en/latest/greenlet.html
@@ -296,19 +319,23 @@ iterator, the `for-of` statement can iterate through the values it yields.
 ## JavaScript async/await (stackless, asymmetric, asynchronous)
 
 JavaScript provides asynchronous programming facilities in the form of
-async/await (see appendix).  An [`async` function][js-async-func] always returns a
-[`Promise`][js-promise] object which can be settled (fulfilled or rejected)
-later.  An `async` function may contain [`await` operators][js-await] which
-cause async function execution to pause until its operand (a `Promise`) is
-settled, and resume execution after fulfilment.
+[async/await] (see [appendix](#async-await)).  An [`async`
+function][js-async-func] always returns a [`Promise`][js-promise] object which
+can be settled (fulfilled or rejected) later.  An `async` function may contain
+[`await` operators][js-await] which cause async function execution to pause
+until its operand (a `Promise`) is settled, and resume execution after
+fulfilment.
 
 Asynchronous programming is more like cooperative multi-tasking than coroutines.
 
-Despite the difference, I now give an example of implementing nested list
-traversal using async/await.  I create two concurrent tasks, one for traversing
-the nested list, and the other prints the numbers, and I use a "zero-capacity
-queue" to allow them to communicate.  It is similar to multi-thread programming,
-except there is only one thread, and the execution is scheduled by a scheduler.
+<a id="async-await-example" />
+
+Despite the difference, I now give an example of traversing nested lists using
+async/await.  I create two concurrent tasks, one traverses the nested list, and
+the other prints the numbers, and they communicate through a "zero-capacity
+queue".  It is similar to multi-thread programming, except there is only one
+thread executing both tasks in alternation, and the execution is scheduled by a
+scheduler.
 
 [js-async-func]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/async_function
 [js-promise]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise
@@ -340,10 +367,10 @@ coroutine, which looks ugly to me.  Anyway, here is the code:
 
 ## Rust async/await (stackless, asymmetric, asynchronous)
 
-Rust's `async` and `await` keywords provides support for asynchronous
-programming (see appendix) based on stackless asymmetric coroutines.  There is
-[a dedicated book][rust-async-book] that covers asynchronous programming in
-Rust.
+Rust's `async` and `await` keywords provides support for [asynchronous
+programming] (see [appendix](#async-await)) based on stackless asymmetric
+coroutines.  There is [a dedicated book][rust-async-book] that covers
+asynchronous programming in Rust.
 
 An [`async` function][rust-async-func] or an [`async` block][rust-async-block],
 when executed, do not execute their bodies immediately, but creates an object
@@ -352,15 +379,15 @@ or block is represented to the user as a `Future`.  The `Future::poll` method
 will resume the async thing until it yields (on an `await` site) or finishes.
 
 The [`await` expression][rust-await] can only be used in `async` functions or
-blocks.  Its semantics is [complicated but well-defined][rust-await]. It calls
-`Future::poll` on a `Future` object and, if the `Future` is ready, it grabs its
-value continues without yielding; otherwise, it yields from the current `async`
-function or block.  When resumed, it will poll the `Future` again and may or may
-not yield depending on whether the `Future` is ready.
+blocks.  Its semantics is complicated but [well-documented][rust-await]. It
+calls `Future::poll` on a `Future` object and, if the `Future` is ready, it
+grabs its value continues without yielding; otherwise, it yields from the
+current `async` function or block.  When resumed, it will poll the `Future`
+again and may or may not yield depending on whether the `Future` is ready.
 
-Implementation-wise, [the documentation suggests][rust-async-state-machine] that
-Rust decomposes an `async` function (or block) into a state machine where each
-state represents an `await` site.
+Implementation-wise, [the documentation suggests][rust-async-statemachine] that
+Rust decomposes an `async` function (or block) into a state machine (see
+[appendix][func2sm]) where each state represents an `await` site.
 
 Async/await is not supposed to be used like coroutines.  In fact, the book
 Asynchronous Programming in Rust [contrasts async/await against
@@ -370,18 +397,30 @@ is possible to do the same in Rust, but that'll need a scheduler.  Since I am
 too lazy to write a scheduler or introduce a third-party scheduler, I'll try a
 different approach here.
 
-I'll abuse the async/await mechanism to exploit its underlying coroutine.  We
-know that `Future::poll` resumes the coroutine.  We call `Future::poll`
-directly, which is seldom done in practice unless we are implementing the
-"executor" (i.e. scheduler).  The `async fn traverse` will recursively call
-itself in the `.await` expression.  When it yields in the middle of execution,
-it yields level by level through all the `.await` sites to the main function,
-but the value it yields is always `Poll::Pending`.  To work around this, every
-time we visit a number, we write the number in a shared variable
-`result_reporter.num`.  We use another shared variable
-`result_reporter.result_taken` to indicate whether the `.await` should continue.
-This `ResultReporter` struct effectively behaves like a zero-capacity channel,
-but the communicating parties are the coroutine and the main function.
+I'll abuse the async/await mechanism to exploit its underlying coroutine and
+make it behave like a generator.
+
+-   *Resume*: We know that `Future::poll` resumes the coroutine.  We call
+    `Future::poll` directly, which is seldom done in usual async/await-based
+    programs unless we are implementing the "executor" (i.e. scheduler).
+
+-   *Yield*: Each `.await` corresponds to a yield site.  We customise the
+    behaviour of our `Future` object (i.e. `WaitUntilResultTaken`) so that the
+    `.await` always yields (`Pending`) when reached from within the coroutine,
+    but will continue (`Ready`) when resumed from the main function.  The
+    behaviour is controlled by the `result_taken` variable.
+
+The `async fn traverse` will recursively call itself in the `.await` expression,
+and will yield level by level through all the `.await` sites to the main
+function.
+
+Then we have a problem.  Whenever it yields, the value yielded to the `.poll()`
+call site in `main` is always `Poll::Pending`.  Then how do we pass the
+traversed numbers to `main`?  To work around this, the coroutine writes the
+number in a shared variable `result_reporter.num` before it yields. This makes
+the `ResultReporter` struct effectively behave like a "zero-capacity queue" in
+our [previous example](#async-await-example), but it connects the generator and
+the main function instead of two tasks.
 
 [rust-async-book]: https://rust-lang.github.io/async-book/
 [rust-async-func]: https://doc.rust-lang.org/reference/items/functions.html#async-functions
@@ -400,10 +439,9 @@ but the communicating parties are the coroutine and the main function.
 The third-part crate [`coroutine`][rust-coroutine] provides stackful asymmetric
 coroutines.  It is built upon the `context` crate (see below).
 
-It looks like this crate has not been maintained for quite some time.  It
-depends on a deprecated feature `FnBox` which no longer exists in the current
-version of compiler.  I'll not do the task using the `coroutine` crate.  If you
-are interested, their documentation contains some examples.
+It looks like this crate has not been maintained for quite some time and it
+won't compile. I'll not do the task using the `coroutine` crate.  If you are
+interested, their documentation contains some examples.
 
 [rust-coroutine]: https://docs.rs/coroutine/latest/coroutine/
 
@@ -436,7 +474,7 @@ can switch back.
 
 C# can implement iterators using the `yield return` or `yield break` statements.
 A function that contains [`yield`][csharp-yield] returns an `Enumerable<T>` or
-`Enumerator<T>` that makes progress every time an item is requested.
+`Enumerator<T>` which is resumed every time an item is requested.
 
 [csharp-yield]: https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/keywords/yield
 
@@ -447,11 +485,12 @@ A function that contains [`yield`][csharp-yield] returns an `Enumerable<T>` or
 
 ## C# async/await (stackless, asymmetric, asynchronous)
 
-C# supports [asynchronous programming][csharp-async-prog].  Like async/await in
-any other language, its programming model is different from coroutines.  It is
-possible to implement asynchronous traversal using an
+C# [supports asynchronous programming][csharp-async-prog] (see
+[appendix](#async-await)).  Like async/await in any other language, its
+programming model is more like cooperative multi-task programming than
+coroutines.  It is possible to implement asynchronous traversal using an
 [AsyncQueue][csharp-async-queue] to communicate between the traversal task and a
-consumer task that consumes the visited values.  I am not going to give an
+consumer task that consumes the visited values. I am not going to give an
 example here.
 
 [csharp-async-prog]: https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/concepts/async/
@@ -464,17 +503,19 @@ example here.
 The purpose of this task is to compare *symmetric*, *asymmetric*, *stackful* and
 *stackless* coroutines.
 
-This task is natural to implement with coroutines.  It is a "generator",
-something that gives out a sequence of values as it executes.  It is natural to
-have one coroutine that gives out the values, and another coroutine to consume
-the values, and the two can run in alternation.
+This task is natural to implement with coroutines, because the traversal of a
+data structure is relatively independent from the consumption of the values.
 
 This task is also much easier with stackful coroutines than stackless
-coroutines.  It is easier to traverse a recursive data structure using
-recursion, and recursion needs a stack.  Stackful coroutines can handle the
-stack quite trivially, but when using stackless coroutines, we have to do some
-hack and chain up multiple coroutines to form a stack of coroutines, and yield
-values through multiple layers of coroutines.
+coroutines.  Because the data structure (nested lists) is recursive, it is
+easier to traverse it using a recursive algorithm, and recursion needs a stack.
+Stackful coroutines can handle recursive calls quite trivially. But when using
+stackless coroutines, we have to do some hack and chain up multiple coroutines
+to form a stack of coroutines, and yield values from the innermost coroutine
+through multiple layers of coroutines to the consumer.
+
+From the code examples above, we can clearly see the difference between
+different kinds of coroutines.
 
 ## What are coroutines anyway?
 
@@ -508,7 +549,7 @@ defines a "goroutine" as "an independent concurrent thread of control", i.e. a
 thread.
 
 <small>Note: Goroutine is a threading mechanism implemented in the user space,
-an "M\*N" green thread system. The Go runtime schedules M goroutines on N native
+an "M × N" green thread system. The Go runtime schedules M goroutines on N native
 threads. It is the scheduler that switches a native thread between different
 goroutines at unspecified time and locations, usually when IO operations may
 block, or when queues are full or empty.  To the programmer, a goroutine is just
@@ -562,6 +603,9 @@ mechanism (see below) to implement.  Stackless coroutines are more restricted,
 but does not require swap-stack.
 
 ## The swap-stack mechanism
+{: #swap-stack :}
+
+[swap-stack]: #swap-stack
 
 Conceptually, the context of nested function calls is a stack, a
 last-in-first-out data structure, called the *control stack*, often simply
@@ -655,9 +699,12 @@ out the interpreted language stack.  As we have discussed before, C does not
 have native support for swap-stack, and it needs libraries written in assembly
 language or compiler extensions to do so.
 
-On the other hand, a stackless interpreter does not turn language-level function
-calls into C-level function calls.  A stackless interpreter usually has the
-following form:
+<a id="apdx-sisc" />
+
+What about stackless interpreters?
+
+A stackless interpreter does not turn language-level function calls into C-level
+function calls.  A stackless interpreter usually has the following form:
 
 ```c
 void interpret_function(Frame *initial_frame) {
@@ -695,8 +742,8 @@ PhD thesis].  Swap-stack is a very important mechanism of the Mu micro VM, and
 it is designed to be supported by the JIT compiler.  It enables the
 implementation of symmetric stackful coroutines, and it is the foundation of
 other VM mechanisms, such as trapping and [on-stack replacement
-(OSR)][osr-paper].  If you are interested, read [Section
-5.3.6][phd-thesis-swapstack] of [my thesis][phd-thesis].
+(OSR)][osr-paper].  If you are interested, read
+[Section 5.3.6][phd-thesis-swapstack] of [my thesis][phd-thesis].
 
 [mu]: https://microvm.github.io/
 [phd-thesis]: https://wks.github.io/downloads/pdf/wang-thesis-2018.pdf
@@ -705,6 +752,9 @@ other VM mechanisms, such as trapping and [on-stack replacement
 
 
 ## Decomposing a function into a state machine
+{: #function-to-state-machine :}
+
+[func2sm]: #function-to-state-machine
 
 Interpreters usually have no problem saving the frame of a function at a `yield`
 point so that it can be resumed later.  The interpreter can implement the layout
@@ -805,6 +855,10 @@ We can use an `enum` to hold *live* (will be used later) local variables at each
 
 
 ## Asynchronous programming (async/await) and coroutines
+{: #async-await :}
+
+[async/await]: #async-await
+[asynchronous programming]: #async-await
 
 In asynchronous programming, a program consists of many tasks that can be
 completed in the future, and one task can wait for other tasks to complete
@@ -826,8 +880,8 @@ language based on coroutines in the form of async/await.  I guess the reason
 behind its gaining popularity is two fold:
 
 1.  Native, OS-provided threads are too heavy-weight, but not many programming
-    languages support light-weight "M\*N" green threads, that is, M OS threads
-    are multiplexed to run N application-level threads and N >> M.  AFAIK, only
+    languages support light-weight "M × N" green threads, that is, M OS threads
+    are multiplexed to run N application-level threads and N ≫ M.  AFAIK, only
     Erlang and Go supports such light-weight threads.
 
 2.  Not many languages support stackful coroutines.  As we discussed before,
