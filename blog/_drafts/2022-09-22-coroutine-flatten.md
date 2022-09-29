@@ -702,6 +702,106 @@ other VM mechanisms, such as trapping and [on-stack replacement
 [osr-paper]: https://wks.github.io/downloads/pdf/osr-vee-2018.pdf
 
 
+## Decomposing a function into a state machine
+
+Interpreters usually have no problem saving the frame of a function at a `yield`
+point so that it can be resumed later.  The interpreter can implement the layout
+of stack frames and the behaviour of function calls / coroutine resumption in
+any way it wants.  They may even allocate frames in the heap so that they can
+temporarily remove a frame from the stack and put it back later. For compilers,
+if swap-stack is available, one thread can just save the register states on one
+stack and restore them from another stack. Without swap-stack, however, it may
+be a challenge.
+
+One way to implement pause-able and resume-able functions is decomposing a
+function into a state machine.  Each `yield` point becomes a state, and a
+function starts by matching the state and jumping to the right place.
+
+For example, assume the `yield()` call represents a coroutine yield in the
+following C pseudo-code:
+
+```c
+void foo() {
+    printf("Long\n");
+    yield();
+    printf("time\n");
+    yield();
+    printf("no\n");
+    yield();
+    printf("see\n");
+    return;
+}
+```
+
+Such a function can be transformed into a function that takes a state when
+called, and returns a new state when yielding or returning.
+
+```c
+enum State {
+    START, STATE1, STATE2, STATE3, END
+};
+
+enum State foo(enum State state) {
+    switch(state) {
+    case START:
+        printf("Long\n");
+        return STATE1;
+
+    case STATE1:
+        printf("time\n");
+        return STATE2;
+
+    case STATE2:
+        printf("no\n");
+        return STATE3;
+
+    case STATE3:
+        printf("see\n");
+        return END;
+    }
+}
+
+int main() {
+    enum State state = START;
+    while (state != END) {
+        printf("Resuming foo()...\n");
+        state = foo(state);
+        printf("foo() paused\n");
+    }
+}
+```
+
+What about local variables?  Local variables can be packed into the states, too.
+C programmers may use the `union` type, but it is easier with tagged unions or
+object-oriented programming.
+
+Suppose we have a (pseudo) Rust function where `yield!()` represents a coroutine
+yield.
+
+```rust
+fn square_sum(a: i32, b: i32) -> Future<i32> {
+    let a2 = a * a;
+    println!("a * a = {}", a2);
+    yield!();
+
+    let b2 = b * b;
+    println!("b * b = {}", b2);
+    yield!();
+
+    let result = a2 + b2;
+    println!("result = {}", result);
+    return result;
+}
+```
+
+We can use an `enum` to hold *live* (will be used later) local variables at each
+`yield!()` point.
+
+{% highlight rust linenos %}
+{% include_file blog/_code/coroutine/coro-split.rs %}
+{% endhighlight %}
+
+
 ## Asynchronous programming (async/await) and coroutines
 
 In asynchronous programming, a program consists of many tasks that can be
