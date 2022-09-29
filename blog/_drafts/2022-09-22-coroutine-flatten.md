@@ -1,12 +1,12 @@
 ---
 layout: post
-title: "Flatten lists with coroutines, Rosetta Code style"
+title: "Traversing nested lists with coroutines, Rosetta Code style"
 tags: coroutine,rosettacode
 excerpt_separator: <!--more-->
 ---
 
-I'll try to use **coroutines** to flatten nested lists, Rosetta Code style. That
-means I'll do it in many different programming languages and libraries,
+I'll try to use **coroutines** to traverse nested lists, Rosetta Code style.
+That means I'll do it in many different programming languages and libraries,
 including Ruby, Lua, Python (including greenlets), JavaScript, Rust, C#, etc.
 This task shows the difference between *symmetric* vs *asymmetric* coroutines,
 and *stackful* vs *stackless* coroutines.
@@ -14,8 +14,8 @@ and *stackful* vs *stackless* coroutines.
 Note that this post alone may not be enough to teach you how to use coroutines
 in all those languages.
 
-I'll also discuss topics like coroutines, swap-stack, async/await, etc. in the
-appendices.
+I'll also provide basic information about coroutines, swap-stack, async/await,
+etc. in the appendices.
 
 <!--more-->
 
@@ -25,16 +25,18 @@ appendices.
 
 -   a nested list of numbers, such as `[1, [[2, 3], [4, 5]], [6, 7, 8]]`
 
-**Enumerate**:
+**Output**:
 
--   all numbers in the list, in the order they appear in the flattened list.
+-   recursively output all numbers in the list.  At each level, visit all
+    numbers in one element before visiting any subsequent elements.
 
     When given the list above, the output should be 1, 2, 3, 4, 5, 6, 7 and
     8, in that order.
 
 **Requirement**:
 
--   Use coroutine(s) to do the enumeration.
+-   Use coroutine(s) to enumerate a nested list, and yield elements to the
+    calling coroutine one at a time.
 
 I will try to do this task using as many programming languages as possible,
 [Rosetta Code][rosetta-code] style, to compare their coroutine syntax and API.
