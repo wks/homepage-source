@@ -65,6 +65,7 @@ async fn traverse(list: &NestedList, reporter: &ResultReporter) {
 }
 
 fn main() {
+    // [1, [[2, 3], [4, 5]], [6, 7, 8]]
     let nested_list = NestedList::Nested(vec![
         NestedList::Leaf(1),
         NestedList::Nested(vec![

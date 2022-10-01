@@ -496,6 +496,173 @@ example here.
 [csharp-async-prog]: https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/concepts/async/
 [csharp-async-queue]: https://learn.microsoft.com/en-us/dotnet/api/microsoft.visualstudio.threading.asyncqueue-1?view=visualstudiosdk-2022
 
+
+## C swapcontext (stackful, symmetric)
+
+The C programming language itself doesn't have any support for coroutines or
+[swap-stack].
+
+The POSIX function [`makecontext`][makecontext-man] can create a "context" for a
+function on a given stack so that when a subsequent invocation of
+[`swapcontext`][swapcontext-man] swaps to that context, it will continue
+execution from the beginning of the given function on the given stack.  This
+effectively provides a [swap-stack] mechanism, and can be used to implement
+symmetric coroutines.
+
+One design flaw of `makecontext` is that it only supports passing `int`
+arguments to the given function.  Because the size of `int` is
+platform-specific, it is hard to pass pointers across `makecontext`.  According
+to the [man page][makecontext-man], POSIX 2008 removed `makecontext` and
+`swapcontext`, citing portability issues, and recommended the use of POSIX
+threads.
+
+[makecontext-man]: https://linux.die.net/man/3/makecontext
+[swapcontext-man]: https://linux.die.net/man/3/swapcontext
+
+{% highlight c linenos %}
+{% include_file blog/_code/coroutine/coro-swapcontext.c %}
+{% endhighlight %}
+
+
+## C++ coroutine (stackless, asymmetric, asynchronous)
+
+C++20 introduced "coroutines".  More precisely, it introduced mechanisms so that
+libraries can implement [asynchronous programming] on top of them.
+
+Any function that contains `co_await`, `co_yield` and/or `co_return` are
+coroutine functions.
+
+Calling a coroutine function behaves like the pseudo-code defined in
+[Section 9.5.4 (dcl.fct.def.coroutine) paragraph 5][cpp-spec-coroutine].
+
+```cpp
+{
+    promise-type promise promise-constructor-arguments ;
+    try {
+        co_await promise.initial_suspend() ;
+        function-body
+    } catch ( ... ) {
+        if (!initial-await-resume-called)
+            throw ;
+        promise.unhandled_exception() ;
+    }
+final-suspend :
+    co_await promise.final_suspend() ;
+}
+```
+
+Basically, it implicitly creates a "promise object" which is called (awaited) at
+different points of the coroutine execution, like "hooks" or aspect-oriented
+programming.  The compiler will generate those `promise.xxxx()` method calls,
+and it is the programmer's (or library writer's) responsibility to define the
+"promise type" and the `.initial_suspend()`, `.unhandled_exception()`, and
+`.final_suspend()` methods to make the generated calls meaningful.
+
+And evaluation a `co_await` expression behaves as defined in [Section 7.6.2.3
+(expr.await) paragraph 5][cpp-spec-await5].  It takes an "awaiter" (more
+precisely, anything that can be converted to an "awaiter") as operand, and
+
+-   It calls `awaiter.await_ready()`.
+    -   If it returns true, it calls `awaiter.await_resume()`, and that's the
+        value of the `co_await` expression.
+    -   If it returns false, it calls `awaiter.await_suspend()`, and depending
+        on its result, it may suspend the execution of the coroutine, or suspend
+        and switch to another coroutine, or just continue execution.
+
+It's the "conditionally yielding" behaviour of common [async/await]-based
+programming.  Again the compiler generates the above method calls, and it is
+again the programmer's (or library writer's) responsibility to implement the
+`.await_ready()`, `.await_resume()` and `.await_suspend()` methods to make those
+generated calls meaningful.
+
+The [`co_yield`][cpp-spec-coyield] expression calls `promise.yield_value(x)`,
+and programmer (or library writer) shall implement the promise object to make
+`.yield_value` method meaningful.
+
+And the [`co_return`][cpp-spec-coreturn] statement calls
+`promise.return_void()`, and the programmer (or library writer) shall implement
+the promise object to make `.return_void` method meaningful.
+
+And the standard library function `coroutine_handle::resume()` resumes a paused
+"coroutine".
+
+As we can see
+
+-   the specification defines the semantics of coroutine functions, the
+    `co_await`, `co_yield` and `co_return` expressions/statements, and the
+    `coroutine_handle` library object and its `.resume()` method, and
+-   the compiler (GCC, Clang, etc.) generate code for the `co_xxx`
+    expression/statements, and
+-   the programmer defines the promise type and (optionally) "awaiter" types and
+    fills in lots and lots of methods to customise the behaviour.
+
+How complicated C++20 "coroutines" are!
+
+It is complicated enough to [confuse a C++ programmer with 25-years'
+experience][cpp-coroutine-tutorial].
+
+And I admit I am not smart enough to use C++20 coroutines.
+
+If you are not smart enough, either, but want to learn about C++20 coroutines, I
+recommend starting with another language, such as Ruby or Lua, and come back to
+C++20 when the idea of coroutines don't scare you.
+
+Anyway, here is the code.  The following code tries to use C++20 coroutines as
+generators.
+
+[cpp-spec-coroutine]: https://timsong-cpp.github.io/cppwp/n4861/dcl.fct.def.coroutine#5
+[cpp-spec-await5]: https://timsong-cpp.github.io/cppwp/n4861/expr.await#5
+[cpp-spec-coyield]: https://timsong-cpp.github.io/cppwp/n4861/expr.yield
+[cpp-spec-coreturn]: https://timsong-cpp.github.io/cppwp/n4861/stmt.return.coroutine
+[cpp-spec-resume]: https://timsong-cpp.github.io/cppwp/n4861/coroutine.handle.resumption
+[cpp-coroutine-tutorial]: https://www.scs.stanford.edu/~dm/blog/c++-coroutines.html
+
+{% highlight cpp linenos %}
+{% include_file blog/_code/coroutine/coro-coroutine20.cpp %}
+{% endhighlight %}
+
+
+## C++ Boost.Coroutine2 (stackful, asymmetric)
+
+Note: Boost.Coroutine is deprecated in favour for Boost.Coroutine2.
+
+[Boost.Coroutine2] provides stackful asymmetric coroutines.  It is implemented
+on top of [Boost.Context] (see below).
+
+A `boost::coroutines2::coroutine<T>` has two members: `pull_type` and
+`push_type`.  A coroutine can be created by instantiating either of them.  In
+this task, we will create a `pull_type` so that the main function can pull data
+from the coroutine.  It will create a coroutine which receives a `&push_type` so
+that it can yield and push data back to the main function.
+
+[Boost.Coroutine2]: https://www.boost.org/doc/libs/1_80_0/libs/coroutine2/doc/html/index.html
+
+{% highlight cpp linenos %}
+{% include_file blog/_code/coroutine/coro-boost.cpp %}
+{% endhighlight %}
+
+
+## C++ Boost.Context (stackful, symmetric)
+
+[Boost.Context] implements a [swap-stack] mechanism using machine-dependent
+assembly language([x86-64][boostctx-x64], [ARM64][boostctx-arm64],
+[RISCV64][boostctx-riscv64], etc.).  We can also implement symmetric coroutines
+using its C++ API.  A `boost::coroutine::fiber` represents a coroutine, and
+`fiber::resume()` switches to that coroutine.  Because `fiber::resume()` doesn't
+pass values, we need to use a side channel (the shared `State` object) to pass
+the value and indicate that the traversal has finished.
+
+[Boost.Context]: https://www.boost.org/doc/libs/1_80_0/libs/context/doc/html/index.html
+[boostctx-x64]: https://github.com/boostorg/context/blob/develop/src/asm/jump_x86_64_sysv_elf_gas.S
+[boostctx-arm64]: https://github.com/boostorg/context/blob/develop/src/asm/jump_arm64_aapcs_elf_gas.S
+[boostctx-riscv64]: https://github.com/boostorg/context/blob/develop/src/asm/jump_riscv64_sysv_elf_gas.S
+[boostctx-fiber]: https://www.boost.org/doc/libs/1_80_0/libs/context/doc/html/context/ff/class__fiber_.html
+
+{% highlight cpp linenos %}
+{% include_file blog/_code/coroutine/coro-boost-context.cpp %}
+{% endhighlight %}
+
+
 # Appendices
 
 ## Why this task?
@@ -646,7 +813,7 @@ do that in C or C++.
 
 Here I give two examples of implementations of swap-stack for compiled code.
 
-1.  One is from [Boost Context].  It is implemented as a library in the assembly
+1.  One is from [Boost.Context].  It is implemented as a library in the assembly
     language, therefore it has to be platform-specific. Here are the code for
     [x86-64][boostctx-x64], [ARM64][boostctx-arm64] and
     [RISCV64][boostctx-riscv64].  Because it is implemented as a library, it can
@@ -659,10 +826,6 @@ Here I give two examples of implementations of swap-stack for compiled code.
     a compiler framework, it can identify and save only live registers, making
     it much more efficient than library-based approaches.
 
-[Boost Context]: https://www.boost.org/doc/libs/1_80_0/libs/context/doc/html/index.html
-[boostctx-x64]: https://github.com/boostorg/context/blob/develop/src/asm/jump_x86_64_sysv_elf_gas.S
-[boostctx-arm64]: https://github.com/boostorg/context/blob/develop/src/asm/jump_arm64_aapcs_elf_gas.S
-[boostctx-riscv64]: https://github.com/boostorg/context/blob/develop/src/asm/jump_riscv64_sysv_elf_gas.S
 [DMG13]: http://dx.doi.org/10.1145/2400682.2400695
 
 
