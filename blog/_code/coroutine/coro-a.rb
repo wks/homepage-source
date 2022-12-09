@@ -9,7 +9,7 @@ def traverse(x)
 end
 
 def fiber_traverse(x)
-  Fiber::new do
+  Fiber.new do
     traverse(x)
     raise StopIteration
   end

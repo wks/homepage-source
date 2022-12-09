@@ -12,7 +12,7 @@ end
 
 def fiber_traverse(x)
   current = Fiber.current     # get the current fiber
-  Fiber::new do
+  Fiber.new do
     traverse(x, current)      # pass the fiber as parent
     raise StopIteration
   end

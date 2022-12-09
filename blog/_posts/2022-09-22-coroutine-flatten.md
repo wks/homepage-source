@@ -62,15 +62,15 @@ Ruby fibers are stackful.  According to the [documentation][ruby-fiber]:
 Ruby fibers can operate in both asymmetric and symmetric mode.  I'll demonstrate
 the task in both modes below.
 
-[ruby-fiber]: https://ruby-doc.org/core-3.1.2/Fiber.html
+[ruby-fiber]: https://docs.ruby-lang.org/en/3.1/Fiber.html
 
 ### Asymmetric
 
 The [`Fiber#resume`] instance method resumes a fiber, and a subsequent call to
 the [`Fiber.yield`] class method jumps back to the resumer.
 
-[`Fiber#resume`]: https://ruby-doc.org/core-3.1.2/Fiber.html#method-i-resume
-[`Fiber.yield`]: https://ruby-doc.org/core-3.1.2/Fiber.html#method-c-yield
+[`Fiber#resume`]: https://docs.ruby-lang.org/en/3.1/Fiber.html#method-i-resume
+[`Fiber.yield`]: https://docs.ruby-lang.org/en/3.1/Fiber.html#method-c-yield
 
 {% highlight ruby linenos %}
 {% include_file blog/_code/coroutine/coro-a.rb %}
@@ -82,7 +82,7 @@ when necessary.  It uses fiber when used as external iterators (calling `e.next`
 explicitly), but still uses call-back for internal iteration (`e.each { |v| ...
 }`).
 
-[ruby-enumerator]: https://ruby-doc.org/core-3.1.2/Enumerator.html
+[ruby-enumerator]: https://docs.ruby-lang.org/en/3.1/Enumerator.html
 
 {% highlight ruby linenos %}
 {% include_file blog/_code/coroutine/coro-a-enum.rb %}
@@ -94,7 +94,7 @@ The [`Fiber#transfer`] method can switch to any fiber, but always needs an
 explicit fiber to switch to.  We can pass the current fiber to the new fiber
 when we create it, so it can remember which fiber to transfer back to.
 
-[`Fiber#transfer`]: https://ruby-doc.org/core-3.1.2/Fiber.html#method-i-transfer
+[`Fiber#transfer`]: https://docs.ruby-lang.org/en/3.1/Fiber.html#method-i-transfer
 
 {% highlight ruby linenos %}
 {% include_file blog/_code/coroutine/coro-s.rb %}
@@ -901,9 +901,9 @@ swap-stack for compiled languages.
 ### The Mu micro virtual machine
 
 I designed the [Mu micro virtual machine][mu], and it is the main part of [my
-PhD thesis].  Swap-stack is a very important mechanism of the Mu micro VM, and
-it is designed to be supported by the JIT compiler.  It enables the
-implementation of symmetric stackful coroutines, and it is the foundation of
+PhD thesis][phd-thesis].  Swap-stack is a very important mechanism of the Mu
+micro VM, and it is designed to be supported by the JIT compiler.  It enables
+the implementation of symmetric stackful coroutines, and it is the foundation of
 other VM mechanisms, such as trapping and [on-stack replacement
 (OSR)][osr-paper].  If you are interested, read
 [Section 5.3.6][phd-thesis-swapstack] of [my thesis][phd-thesis].
