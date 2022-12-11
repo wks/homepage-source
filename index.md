@@ -26,6 +26,9 @@ collection mechanism.
 
 You can find my fun projects [on GitHub](https://github.com/wks).
 
+I recently created [TUIModPlayer], a Rust program that plays [Module
+(a.k.a. "mod")][mod] music in terminals.
+
 [mmtk]: https://www.mmtk.io/
 [ruby-mmtk]: https://github.com/mmtk/mmtk-ruby
 [ruby]: https://www.ruby-lang.org/
@@ -34,6 +37,8 @@ You can find my fun projects [on GitHub](https://github.com/wks).
 [huawei]: https://www.huawei.com/
 [openark]: https://gitee.com/openarkcompiler/OpenArkCompiler
 [openark-naiverc]: https://gitee.com/openarkcompiler/OpenArkCompiler/blob/master/src/mrt/compiler-rt/include/collector/collector_naiverc.h
+[TUIModPlayer]: https://github.com/wks/tuimodplayer
+[mod]: https://modarchive.org/index.php?article-modules
 
 ## Publications
 
