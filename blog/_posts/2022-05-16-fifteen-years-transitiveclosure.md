@@ -545,7 +545,7 @@ refactoring.
 [jikesrvm-beginning-scanning]: https://github.com/JikesRVM/JikesRVM/blob/600956237939e61b314535d485dfdfcbab2c0bbe/MMTk/src/org/mmtk/vm/Scanning.java
 [jikesrvm-beginning-tracelocal]: https://github.com/JikesRVM/JikesRVM/blob/600956237939e61b314535d485dfdfcbab2c0bbe/MMTk/src/org/mmtk/plan/TraceLocal.java#L42
 
-### Unifying scanObject and enumeratePointers with "raceStep"
+### Unifying scanObject and enumeratePointers with "TraceStep"
 
 In late 2006, [someone created a commit][jikesrvm-tracestep-commit] which
 introduced a new version of reference counting collector, and at the same time
