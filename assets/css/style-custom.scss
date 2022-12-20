@@ -1,6 +1,12 @@
 ---
 ---
 
+@import "rouge-base16-dark";
+@import "default_colors";
+
+$inline_code: #cb90bf;
+$inline_code_link: #8178eb;
+
 // Blog posts
 .blog-post-list .excerpt {
     font-size: smaller;
@@ -12,13 +18,29 @@
 
 // Inline code.  The text colour was too dark.
 code.highlighter-rouge {
-  color: #cb90bf;
+  color: $inline_code;
 }
 
 // But if it is part of an anchor, make it bluer, and make the shadow heavier.
 a code.highlighter-rouge {
-  color: #8178eb;
+  color: $inline_code_link;
   text-shadow: 0 0 5px rgba(104, 182, 255, 0.67);
+}
+
+// Table of contents
+#table-of-contents-box {
+    background: rgba(0, 0, 0, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    padding: 0.5em;
+    background: #000000;
+}
+
+.toc-title {
+    font-size: smaller;
+}
+
+#table-of-contents {
+    display: none;  // Hidden by default
 }
 
 // Publications list

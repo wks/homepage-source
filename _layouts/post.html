@@ -7,9 +7,27 @@ layout: default
 
 <p class="view">by {{ page.author | default: site.author }}</p>
 
+<div id="table-of-contents-box">
+    <div class="toc-title">Table of contents <a id="toc-toggle" href="">[show/hide]</a></div>
+    <div id="table-of-contents"></div>
+</div>
+
 {{content}}
 
 {% if page.tags != empty %}
   <small>tags: <em>{{ page.tags | join: "</em> - <em>" }}</em></small>
 {% endif %}
 
+<script type="text/javascript">
+$(document).ready(function() {
+    $('#table-of-contents').toc({
+        title: "",
+        showEffect: 'none'
+    });
+
+    $('#toc-toggle').click(function() {
+        $('#table-of-contents').toggle();
+        return false;
+    });
+});
+</script>
