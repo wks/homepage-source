@@ -75,16 +75,18 @@ machines, aren't we?
 Ruby programmers don't need to worry about freeing their objects because the
 garbage collector takes care of reclaiming unused objects.
 
-If you instantiate classes written in Ruby, the Ruby runtime knows where
+If you instantiate classes written in Ruby, the CRuby runtime knows where
 instance variables are held, and the GC can traverse from the object to its
 children.
 
-If you instantiate *built-in* types implemented in C, Ruby still gets you
+<small>*(I bet you don't know that CRuby sometimes stores instance variables in
+a global hash table outside the object.  It's called a "GLOBAL Instance Variable
+TaBLe", or `global_ivtbl` for short.)*</small>
+
+If you instantiate *built-in* types implemented in C, CRuby still gets you
 covered. CRuby developers have taught the GC how to scan those special objects
 by writing functions that [mark their children][gc_mark_children] and [update
-their reference fields][gc_update_object_references].  Other Ruby
-implementations (such as JRuby, TruffleRuby, etc.) also have their own way to
-scan objects.
+their reference fields][gc_update_object_references].
 
 [gc_mark_children]: https://github.com/ruby/ruby/blob/693e4dec236e14432df97010082917a3a48745cb/gc.c#L7242
 [gc_update_object_references]: https://github.com/ruby/ruby/blob/693e4dec236e14432df97010082917a3a48745cb/gc.c#L10550
@@ -225,12 +227,14 @@ Then large chunks of memory can be returned to the operating system.
 disabled by default, because it allocates objects as slowly as mark-sweep, and
 compacts the heap as extremely slowly as mark-compact.*</small>
 
-## GC and C extension API
+## GC and Ruby's C extension API
 
-You see.  The GC algorithm CRuby uses dictates the design of the C extension
+You see.  The GC algorithm CRuby uses dictates the design of Ruby's C extension
 API:
 
 -   When CRuby used mark-sweep, *marking functions* were sufficient.
+    -   Inside marking functions, the idiomatic `rb_gc_mark(obj->x);` statement
+        gives the GC the field value without updating the field.
 -   After compaction was introduced, *updating functions* were needed, too.
     -   Inside updating functions, the `rb_gc_location` function gets the new
         location of an object, and the idiomatic statement `obj->x =
@@ -241,7 +245,8 @@ The "INC" and "DEC" operations are not needed for CRuby because it doesn't use
 reference counting.
 
 <small>*(Actually, what the GC needs is just a way to **visit** all the
-reference fields of any given object.  A more clever API design would be letting
+reference fields of any given object.  Instead of having separate marking and
+updating functions, a more clever API design would be letting
 the C extension pass the **offsets** or **addresses** of the reference fields to
 the GC so that it can read or update those fields, regardless of whether it is
 using mark-sweep, mark-compact or any other GC algorithms.  We will come to this
@@ -250,10 +255,10 @@ current CRuby GC.)*<small>
 
 ### Legacy gems
 
-The bad news is, even today, there are still thousands of third-part Ruby
-libraries developed before Ruby had compacting GC, and did not have updating
-functions.  CRuby developers decided to maintain compatibility with those legacy
-libraries.
+The bad news is, even today, there are still lots of third-part Ruby libraries
+which were developed before Ruby had compacting GC, and still do not have
+updating functions. CRuby developers decided to maintain compatibility with
+those legacy libraries.
 
 -   The semantics of the publicly exposed `rb_gc_mark` function was changed so
     that it not only marks the object, but also **pins** it.
@@ -293,9 +298,9 @@ CRuby enough to make it working with MarkSweep last year, and Immix recently.
 [angus-homepage]: https://angusat.kinson.it/
 [angus-lca2022]: https://kinson.it/talks/lca2022
 
-## Supporting MMTk, step by step
+## Supporting MMTk for any other VM, step by step
 
-Adding MMTk support for a given VM takes several steps.
+Usually, adding MMTk support for a given VM takes several steps.
 
 1.  Support NoGC.
 2.  Support MarkSweep.
@@ -306,8 +311,8 @@ Adding MMTk support for a given VM takes several steps.
 The first step is, maybe surprising to some people, supporting NoGC.  In this
 step, we disable the VM's existing GC, and hijack the VM's object allocation
 mechanism so that it allocates using MMTk.  Although NoGC is not a realistic GC
-algorithm, this step helps us identifying the boundary between the VM and the
-GC.  And it is the easiest.  The VM just calls the `mmtk::memory_manager::alloc`
+algorithm, this step helps us identify the boundary between the VM and the GC.
+And it is the easiest.  The VM just calls the `mmtk::memory_manager::alloc`
 function, and it should just work... well... until the memory is exhausted.
 Despite of this, Angus managed to run a Rails web server with NoGC.
 
@@ -355,6 +360,45 @@ That's what I have done so far.  In the future, there will be next steps, too.
     object pinning, while Sticky Immix is variant of GenImmix that supports
     object pinning.
 5.  Implementing fast paths in YJIT.
+
+## The Immix GC algorithm
+
+*(For more information about Immix, read [this paper][BM08].)*
+
+[BM08]: https://users.cecs.anu.edu.au/~steveb/pubs/papers/immix-pldi-2008.pdf
+
+![Immix Heap Organization]({% link assets/img/immix-heap-organization.png %})
+
+The Immix collector organises the heap into equally sized blocks (usually 32KB),
+and each block has many lines (usually 128 bytes).  An object may span multiple
+lines, but cannot cross block boundaries.
+
+<small>*(Note: Objects larger than 8KB are allocated in a dedicated "large
+object space".  It always allocates multiples of page-sized memory, and it uses
+the mark-sweep GC algorithm.  You really don't want to move large objects
+because that's horribly slow.)*</small>
+
+When allocating, it uses a bump-pointer allocator to allocate objects within a
+page, skipping occupied lines if needed.  During GC, when traversing the heap,
+lines occupied by live objects are marked; when sweeping, unmarked lines are
+reclaimed.  From time to time, Immix evacuates a small number of blocks that are
+heavily fragmented (having many unallocated "holes" between occupied lines).  We
+see:
+
+-   The Immix allocator allocates objects as fast as mark-compact and semispace.
+-   Normal (non-defragmenting) GCs are as fast as mark-sweep.
+-   It is capable of defragmenting the heap by evacuating, but doesn't do it in
+    every GC, and doesn't need to move all (or even the majority of) objects.
+
+These characteristics make Immix an overall efficient GC algorithm, balancing
+allocation speed, GC speed and heap utilisation.
+
+Moreover, Immix is friendly to object pinning.  Semispace and MarkCompact needs
+to move every single object to make a contiguous region of free space.  Immix,
+on the other hand, can allocate into partially occupied blocks by skipping
+occupied lines.  Therefore, if an object is pinned, Immix can simply choose not
+to evacuate that object in the current GC, while other objects in the same
+blocks are still free to move.
 
 <!--
 vim: tw=80
