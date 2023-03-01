@@ -394,7 +394,7 @@ This is why the legacy `rb_gc_mark` function is implemented with
 CRuby has some built-in object types that have un-update-able fields.  They
 include:
 
--   Any object that has "global instance variable table", or `global_ivtbl`.
+-   Any object that uses "global instance variable table", or `global_ivtbl`.
 -   `Hash` that has the `compare_by_identity` function called.
 -   Some `T_IMEMO` types, including
     -   `imemo_ifunc`
@@ -490,8 +490,116 @@ blocks are still free to move.
 
 # Potential Pinning Parents (PPPs)
 
+Before we enable Immix, we must be aware of one important difference between an
+evacuating collector (Immix) and a compacting collector (MarkCompact).
 
+## Racing between moving and pinning
 
+**MarkCompact has a distinct compacting phase after marking, while Immix
+traverses the heap only once.**
+
+MarkCompact has the opportunity to pin objects gradually as it traverses through
+all live objects during its marking phase.  When MarkCompact starts moving
+objects, it already knows which object can be moved, and which objects cannot be
+moved.
+
+Evacuating collectors like Immix do not have such an opportunity.  An evacuating
+collector moves an object the first time it visits that object.  However, the
+order in which the GC visits objects is non-deterministic.
+
+```
+Roots --------------> A
+  |                   |
+  |                   |
+  v                   v
+  B -----pinning----> C
+```
+
+Suppose we have objects A, B and C.  Both A and B point to C, but the field of B
+cannot be updated for some reason.
+
+-   If the GC first reaches C from B, it will find that the field of B cannot be
+    updated, and has the opportunity to pin C when C has not been moved, yet.
+    Then when the GC reaches C from A, C is already pinned, and the GC simply
+    skips updating the field of A.
+-   But if the GC first reaches C from A, it will move C and update the field in
+    A.  When the GC reaches C from B, it will find that C has been moved, but
+    the field of B cannot be updated.  This results in an error.
+    
+This phenomenon demands that we must pin all objects that needs to be pinned
+before we traverse the heap.
+
+Then how can we know which objects need to be pinned?  In theory, there are two
+basic methods.
+
+The first method is recording all such pinning (un-update-able) edges.  This
+requires a write barrier.  If a pinning field is written to, we pin the object
+it points to.  However, this method is impractical for CRuby.  CRuby infamously
+has ["write-barrier unprotected" (WB-unprotected) objects][wb-unprotected].
+
+[wb-unprotected]: https://blog.heroku.com/incremental-gc
+
+The second method is recording all "potential pinning parents".
+
+## Recording potential pinning parents (PPPs).
+
+A potential pinning parent (PPP) is any object that has un-update-able fields.
+In CRuby, it means any object with any field marked with `gc_mark_and_pin`
+directly, or indirectly via `rb_gc_mark`, `gc_mark_maybe`, etc.
+
+PPPs include:
+
+-   All objects that use `global_ivtbl`.
+-   All Hash that has `compare_by_identity` called.
+-   Some `T_IMEMO` types, as discussed above.
+-   Some built-in `T_DATA` types.
+-   All third-part `T_DATA` types.
+
+You should feel this list familiar.  We have discussed them before.  The first
+four cases correspond to the built-in objects that pin their children; the last
+case corresponds to legacy third-party C extensions.
+
+To record them, I used a `Vec` (a Rust dynamically-sized array) to hold
+references to PPPs.  An object reference is added to that `Vec` when an object
+of certain `T_IMEMO` or `T_DATA` types is created, or when an object becomes a
+PPP (i.e. when the `Hash#compare_by_identity` method is called, or an object
+gains the `FL_EXIVAR` flag).
+
+When GC starts, before traversing the heap, the GC visits the list of all PPPs
+and pins their children pointed by their un-update-able fields.   In this way,
+while traversing the heap, the GC already knows which objects can be moved and
+which objects cannot.
+
+<small>*(Note that the object-pinning mechanism we use here only prevents
+objects from moving, but does not keep the objects alive.  Programming languages
+usually expose an API (such as the `fixed` keyword for C#) that pins an object
+and keeps the object alive, too.  Such a mechanism is usually intended for
+passing buffers to C code.)*</small>
+
+When the life and death of all objects are determined, the GC will go through
+the PPP list again, and remove all references to dead PPPs.
+
+## Problems with this approach
+
+### Dead PPPs
+
+We recorded all PPPs, but not all PPPs are alive when GC starts.
+
+```
+Roots --------------> D
+                      |
+                      |
+                      v
+  E -----pinning----> F
+```
+
+As shown in the diagram above, E has an un-update-able field pointing to F.
+If object E is dead, then F doesn't need to be pinned because it is unnecessary
+to update fields of dead objects.  However, if we pin the children of object in
+the PPP list as described above, F will still be pinned.
+
+The root problem is that we cannot determine whether E is live of dead until we
+finished computing the transitive closure from roots.
 
 <!--
 vim: tw=80
