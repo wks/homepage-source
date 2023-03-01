@@ -273,7 +273,7 @@ the children movable.  There is some performance penalty because some objects
 cannot be moved.  Despite of that, it works.
 
 
-# MMTk and Ruby
+# MMTk
 
 For those who don't know yet, [MMTk] was part of JikesRVM and is now a
 VM-independent Rust library.  It is a framework for garbage collection.  It
@@ -343,9 +343,23 @@ The fifth step is supporting fast paths.  This is an optimisation.  For
 performance reasons, the VM should inline the commonly executed fast paths of
 object allocation and write barriers... well... if it care about performance.
 
+# MMTk and CRuby
+
+Great!.  Let's use MMTk for CRuby, and make all of its GC algorithms available
+for CRuby!
+
+Unfortunately, there is a catch.  CRuby needs object pinning, and that limits
+what GC algorithms we can use.
+
+## CRuby and object pinning
+
+Why does CRuby pin objects?
+
+
+
 ## Supporting MMTk for CRuby, step by step
 
-CRuby is just another VM.  In theory, the aforementioned steps still appliy.  In
+CRuby is just another VM.  In theory, the aforementioned steps still apply.  In
 reality, however, we have to make some adjustments because of the nature of
 CRuby.
 
@@ -387,8 +401,9 @@ see:
 
 -   The Immix allocator allocates objects as fast as mark-compact and semispace.
 -   Normal (non-defragmenting) GCs are as fast as mark-sweep.
--   It is capable of defragmenting the heap by evacuating, but doesn't do it in
-    every GC, and doesn't need to move all (or even the majority of) objects.
+-   It is capable of defragmenting the heap by evacuating, but doesn't have to
+    move objects in every GC, and doesn't need to move every single object (or
+    even the majority of all objects).
 
 These characteristics make Immix an overall efficient GC algorithm, balancing
 allocation speed, GC speed and heap utilisation.
@@ -399,6 +414,9 @@ on the other hand, can allocate into partially occupied blocks by skipping
 occupied lines.  Therefore, if an object is pinned, Immix can simply choose not
 to evacuate that object in the current GC, while other objects in the same
 blocks are still free to move.
+
+
+# Modifying CRuby 
 
 <!--
 vim: tw=80
