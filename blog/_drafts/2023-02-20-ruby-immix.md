@@ -215,7 +215,7 @@ size-segregated free-lists.  It still does mark-sweep GC most of the time.  But
 when the user calls `GC.compact`, or if auto-compaction is enabled, the GC will
 
 1.  traverse the heap once to mark live object, and
-2.  go through all cells with live objects and and move them to free pages, and
+2.  go through all cells with live objects and move them to free pages, and
 3.  go through all cells with live objects again and update their reference
     fields.
     -   Note: After objects have been moved, pointers to the moved objects
@@ -317,7 +317,7 @@ function, and it should just work... well... until the memory is exhausted.
 Despite of this, Angus managed to run a Rails web server with NoGC.
 
 The next step is supporting MarkSweep.  MarkSweep is a non-moving collector, so
-we only need to focus on identifying garbages and not worry about pointer
+we only need to focus on identifying garbage and not worry about pointer
 updating at this moment.  The VM needs to implement a stop-the-world mechanism
 to stop all mutator threads when GC is triggered, a root scanner to visit roots
 on the stack as well as in global data structures, and an object scanner that
@@ -355,25 +355,97 @@ what GC algorithms we can use.
 
 Why does CRuby pin objects?
 
+### Conservative stack scanning
 
+CRuby is, as the name suggests, written in C.  Methods of built-in types and
+types in C extensions can be implemented in C.  CRuby allows C local variables
+to hold references to Ruby objects using the `VALUE` type.  A `VALUE` can be a
+direct pointer to a heap object, without using any indirection table (like
+OpenJDK and Lua) or reference counting (like CPython).  Here comes the problem:
+C compilers cannot generate stack maps (the metadata that records "which offsets
+of a frame contain references").  How can the GC find object references on the
+stack?
+
+CRuby scans stacks conservatively.  It assumes that every word on the stack can
+*potentially* be a reference.  If a word *happens to* be the address to an
+object, the GC will consider it as an object reference, and keep that object
+alive.  However, objects kept alive this way cannot be moved.  If the object is
+moved, the reference on the stack needs to be updated.  But that may be
+incorrect.  What if the word is just an integer that happens to have the same
+value as an object address?  For this reason, the object must be pinned.
+
+The `rb_gc_mark_machine_stack` function calls `gc_mark_maybe` on each word in
+the machine stack, and `gc_mark_maybe` does some filtering and calls
+`gc_mark_and_pin`.
+
+### Legacy C extensions with un-update-able fields
+
+Like I mentioned in previous sections, some C extensions were developed before
+Ruby had copying GC. They cannot update their object fields during GC.  To keep
+those C extensions working, CRuby pins the objects *pointed by* those
+un-update-able fields during the marking phase, and refuse to move them during
+the sweeping phase.
+
+This is why the legacy `rb_gc_mark` function is implemented with
+`gc_mark_and_pin`.
+
+### Legacy and conservative built-in objects with un-update-able fields
+
+CRuby has some built-in object types that have un-update-able fields.  They
+include:
+
+-   Any object that has "global instance variable table", or `global_ivtbl`.
+-   `Hash` that has the `compare_by_identity` function called.
+-   Some `T_IMEMO` types, including
+    -   `imemo_ifunc`
+    -   `imemo_memo`
+    -   `imemo_iseq`
+    -   `imemo_ast`
+    -   `imemo_tmpbuf`
+    -   `imemo_parser_strstream`
+-   Some `T_DATA` types, such as `VM/Thread`.
+
+Some of them are really conservative.  For example, `imemo_tmpbuf` is used to
+implement `ALLOCV`.  The GC scans every word in `imemo_tmpbuf` conservatively,
+like scanning words on the stack.  This makes `ALLOCV` behave just like
+`alloca`: allocating temporary memory that is automatically recycled after the
+current function returns, except that `ALLOCV` allocates the buffer on the heap
+(when size is large).  Users use `ALLOCV` like a safer variant of `alloca`.
+
+`Hash` needs to pin its children when comparing by identity because CRuby uses
+the object address as the hash key of such hash tables.  If an object is moved,
+the hash code will change.  Therefore, the key has to be pinned.
+
+<small>*(NOTE: a wiser way to hash objects by identity is using **address-based
+hashing**.  It uses the object address as hash code, but when the object is
+moved, the GC saves the old address in a hidden field of the new object, and use
+the saved address as its "identity hash".  This preserves the "identity hash" of
+an object across copying GC.)*</small>
+
+Other objects pin their children solely for historical reasons.  Examples
+include `imemo_iseq` and the `global_ivtbl`.  You may assume Ruby developers
+always keep built-in types up to date and make use of `rb_gc_mark_movable` and
+`rb_gc_location`, but it doesn't seem to be this case.  If there are not many
+instances of such objects, developers will tend to leave the code as is because
+the performance impact of not being able to move objects is small (at least it
+is small with the current GC which doesn't move objects by default).
 
 ## Supporting MMTk for CRuby, step by step
 
-CRuby is just another VM.  In theory, the aforementioned steps still apply.  In
-reality, however, we have to make some adjustments because of the nature of
-CRuby.
+Because of object pinning, we have to deviate a little bit from the usual steps
+of supporting a VM in order to support CRuby.
 
-1.  Supporting NoGC.  Angus had done that before.
-2.  Supporting MarkSweep.  I had done that before.
-3.  Supporting Immix.  I swapped Semispace with Immix because Ruby needs object
-    pinning.  Semispace doesn't support object pinning while Immix does.
-
-That's what I have done so far.  In the future, there will be next steps, too.
-
+1.  Supporting NoGC.
+2.  Supporting MarkSweep.
+3.  Supporting Immix.  Semispace doesn't support object pinning, while Immix
+    does.
 4.  Supporting StickyImmix.  Similarly, neither GenCopy nor GenImmix support
     object pinning, while Sticky Immix is variant of GenImmix that supports
     object pinning.
 5.  Implementing fast paths in YJIT.
+
+Angus had done step 1 before, and I have just finished step 3 recently (although
+bugs still exist).
 
 ## The Immix GC algorithm
 
@@ -408,7 +480,7 @@ see:
 These characteristics make Immix an overall efficient GC algorithm, balancing
 allocation speed, GC speed and heap utilisation.
 
-Moreover, Immix is friendly to object pinning.  Semispace and MarkCompact needs
+Moreover, Immix is friendly to object pinning.  Semispace and MarkCompact need
 to move every single object to make a contiguous region of free space.  Immix,
 on the other hand, can allocate into partially occupied blocks by skipping
 occupied lines.  Therefore, if an object is pinned, Immix can simply choose not
@@ -416,7 +488,10 @@ to evacuate that object in the current GC, while other objects in the same
 blocks are still free to move.
 
 
-# Modifying CRuby 
+# Potential Pinning Parents (PPPs)
+
+
+
 
 <!--
 vim: tw=80
