@@ -416,12 +416,6 @@ current function returns, except that `ALLOCV` allocates the buffer on the heap
 the object address as the hash key of such hash tables.  If an object is moved,
 the hash code will change.  Therefore, the key has to be pinned.
 
-<small>*(NOTE: a wiser way to hash objects by identity is using **address-based
-hashing**.  It uses the object address as hash code, but when the object is
-moved, the GC saves the old address in a hidden field of the new object, and use
-the saved address as its "identity hash".  This preserves the "identity hash" of
-an object across copying GC.)*</small>
-
 Other objects pin their children solely for historical reasons.  Examples
 include `imemo_iseq` and the `global_ivtbl`.  You may assume Ruby developers
 always keep built-in types up to date and make use of `rb_gc_mark_movable` and
@@ -579,11 +573,13 @@ passing buffers to C code.)*</small>
 When the life and death of all objects are determined, the GC will go through
 the PPP list again, and remove all references to dead PPPs.
 
-## Problems with this approach
+## Dead PPPs
 
-### Dead PPPs
+One problem with this approach is that the PPP list may contain dead objects.
 
-We recorded all PPPs, but not all PPPs are alive when GC starts.
+We recorded all PPPs when they are created, but when GC starts, not all recorded
+PPPs are still alive.  This will result in pinning objects that no longer needs
+to be pinned.  Let's see an example:
 
 ```
 Roots --------------> D
@@ -599,7 +595,289 @@ to update fields of dead objects.  However, if we pin the children of object in
 the PPP list as described above, F will still be pinned.
 
 The root problem is that we cannot determine whether E is live of dead until we
-finished computing the transitive closure from roots.
+finished computing the transitive closure from roots.  When using MarkCompact,
+we traverse the heap twice.  We pin children of PPPs as we traverse the heap in
+during the non-moving marking phase.  By doing so, we pin only children of live
+PPPs.  We don't have the same opportunity for Immix because we only traverse the
+heap once.
+
+One obvious "solution" is doing an additional non-moving heap traversal before
+moving objects.  That's unnecessarily costly, and will ruin all the performance
+advantage of Immix.
+
+But I think it will not be that bad to conservatively pin the children of dead
+PPPs.  If a PPP is dead, it will pin its children in this GC, but it will also
+be removed from the PPP list after the current GC.  Therefore, during the next
+GC, those conservatively pinned children will no longer be pinned again.
+
+## Reducing the number of PPPs
+
+Given that this approach is conservative, the best things we can do are
+
+1.  Reduce the number of PPPs, and
+2.  Reduce the number of (both pinning and non-pinning) fields of PPPs.
+
+In addition to `global_ivtbl` and `Hash`, other PPPs are instances of `T_IMEMO`
+and `T_DATA`.  It is worth knowing which types appear the most frequently among
+PPPs.
+
+### The most frequent PPP types
+
+Before I actually enabled copying GC, I did some experiments.  I ran a simple
+program shown below and recorded objects of PPP types.
+
+```ruby
+puts "Hello world!"
+GC::start
+puts "Goodbye world!"
+```
+
+Note: This program will trigger GC twice, once during start-up, and the other
+time for `GC::start`.  During start-up, the VM also triggers a GC because the
+parser is allocating objects.
+
+When?     | total PPPs | total PPP edges | pinning edges | unique pinned objects | live PPPs after GC
+---       | ---        | ---             | ---           | ---                   | ---
+start-up  | 455        | 1086            | 285           | 115                   | 455/455
+manual    | 1319       | 2206            | 107           | 64                    | 1080/1319
+
+It looks like during start-up there are fewer PPP instances, but pinning more
+objects; during execution, more PPPs are created but they have less pinning
+edges and pin less objects.
+
+The following table shows the type of PPPs during start-up.
+
+<small>*(The data is collected in a different run, so the numbers of instances
+do not sum up to 455.)*</small>
+
+kind      | type                                   | instances | instances that pin any child
+---       | ---                                    | ---       | ---
+`T_DATA`  | `mutex`                                | 1         | 0
+`T_DATA`  | `encoding`                             | 12        | 0
+`T_DATA`  | `(null)`                               | 1         | 1
+`T_DATA`  | `ENV`                                  | 1         | 0
+`T_DATA`  | `ARGF`                                 | 1         | 1
+`T_IMEMO` | `iseq`                                 | 177       | 0
+`T_DATA`  | `ractor`                               | 1         | 1
+`T_DATA`  | `VM`                                   | 1         | 0
+`T_DATA`  | `VM/thread`                            | 1         | 1
+`T_DATA`  | `binding`                              | 1         | 1
+`T_DATA`  | `thgroup`                              | 1         | 0
+`T_DATA`  | `memory_view/exported_object_registry` | 1         | 0
+`T_DATA`  | `parser`                               | 16        | 16
+`T_IMEMO` | `ast`                                  | 15        | 14
+`T_IMEMO` | `tmpbuf`                               | 147       | 0
+`T_IMEMO` | `parser_strterm`                       | 109       | 0
+
+*Note: the `Data:(null)` is an old-style un-typed Data. It is a
+`mark_marshal_compat_t`.*
+
+From this table, we see some PPP types have many instances, but hardly pin any
+objects.  For example, there are 177 `iseq` instances, but none of them pin any
+children.
+
+The following table lists top PPP instances sorted by the number of fields.
+
+PPP                            | total fields | pinning fields
+---                            | ---          | ---
+0x200ffc6b6b0 (Data:VM/thread) | 143          | 142
+0x200ffcc5638 (Memo:ast)       | 54           | 0
+0x200ffc703f8 (Memo:iseq)      | 31           | 0
+0x200ffca4330 (Memo:iseq)      | 25           | 0
+0x200ffc970b0 (Memo:iseq)      | 20           | 0
+0x200ffc7b020 (Memo:iseq)      | 19           | 0
+0x200ffcaaf08 (Memo:iseq)      | 16           | 0
+0x200ffccbd78 (Memo:iseq)      | 13           | 0
+0x200ffc97430 (Memo:iseq)      | 13           | 0
+0x200ffc0ae28 (Data:(null))    | 13           | 13
+0x200ffc96908 (Memo:iseq)      | 11           | 0
+0x200ffcc5e18 (Memo:iseq)      | 10           | 0
+0x200ffc9faf0 (Memo:iseq)      | 10           | 0
+0x200ffcab288 (Memo:iseq)      | 9            | 0
+0x200ffc90200 (Memo:iseq)      | 8            | 0
+0x200ffcc5fd8 (Memo:iseq)      | 7            | 0
+0x200ffcc7ac0 (Memo:iseq)      | 7            | 0
+0x200ffccff18 (Memo:iseq)      | 7            | 0
+0x200ffc70388 (Memo:iseq)      | 7            | 0
+0x200ffcc6048 (Memo:iseq)      | 6            | 0
+0x200ffccad48 (Memo:iseq)      | 6            | 0
+0x200ffccb9f8 (Memo:iseq)      | 6            | 0
+0x200ffca15b0 (Memo:iseq)      | 6            | 0
+0x200ffca26f8 (Memo:iseq)      | 6            | 0
+0x200ffc93f08 (Memo:iseq)      | 6            | 0
+0x200ffc974a0 (Memo:iseq)      | 6            | 0
+0x200ffc7a798 (Memo:iseq)      | 6            | 0
+0x200ffcc56e0 (Data:parser)    | 5            | 5
+0x200ffca2848 (Memo:iseq)      | 5            | 0
+0x200ffca28b8 (Memo:iseq)      | 5            | 0
+
+The number of "total fields" and "pinning fields" are collected from
+`gc_mark_children`.  "Pinning fields" is the number of fields visited by
+`rb_gc_mark`; "total fields" includes that plus other fields visited by
+`rb_gc_mark_movable`.
+
+We see that `iseq` objects tend to have many non-pinning fields but no pinning
+field.  But `iseq` is really a PPP type because it has fields that could be
+visited by the pinning `rb_gc_mark` function under certain condition, such as
+this one:
+
+```c
+    if (FL_TEST_RAW((VALUE)iseq, ISEQ_NOT_LOADED_YET)) {
+        rb_gc_mark(iseq->aux.loader.obj);
+    }
+```
+
+Maybe this condition is seldom met.  Maybe the field usually contains `NULL` or
+`nil`.  But as long as this `rb_gc_mark` exists, we must treat the `iseq` type
+as "potentially pinning".
+
+**Types like `iseq` have the highest priority to be eliminated from the list of
+PPP types.**  It has many instance, therefore each of them needs to be scanned
+before every GC (`iseq` instances are quite long-living).  It has many
+non-pinning fields, which means every invocation of `gc_mark_children` is
+expensive, as it has to visit many irrelevant fields.  We rely on
+`gc_mark_children` to find its pinning fields, but we can't control which field
+`gc_mark_children` visits unless we rewrite the marking function for `iseq` by
+hand.
+
+### Eliminating PPP types
+
+Our collaborator Peter from Shopify examined the marking function of `iseq` and
+found that all of its fields should be update-able.  He made a series of changes
+to the marking and updating function for `iseq`, and [the last of
+them][iseq-movable] made it possible to update all fields of `iseq`.  From then
+on, `iseq` is no longer a PPP type.
+
+[iseq-movable]: https://github.com/ruby/ruby/pull/7156
+
+After that change, the number of total number of PPPs during start-up is greatly
+reduced.  More importantly, the number of live PPPs after the first GC is also
+greatly reduced.
+
+<small>*Note: (1) The data is collected in another run, so the numbers will not
+be consistent with previous tables. (2) The number of pinning edges fluctuates
+slightly between execution.*</small>
+
+Before/after | total PPPs | total PPP edges | pinning edges | unique pinned objects | live PPPs after GC
+---          | ---        | ---             | ---           | ---                   | ---
+Before       | 457        | 1257            | 277           | 115                   | 215/455
+After        | 280        | 325             | 278           | 115                   | 41/280
+
+I also [made a change][givtbl-movable] to CRuby to make all instance variables
+held in `global_ivtbl` update-able.
+
+[givtbl-movable]: https://github.com/ruby/ruby/pull/7206
+
+### Making field updating easier
+
+CRuby has many built-in `T_IMEMO` and `T_DATA` types, and some of them still
+don't support field updating now.  In theory, it is possible to make all such
+types capable to update their fields, as long as the fields are not conservative
+like `imemo_tmpbuf`.  Doing this thoroughly and systematically takes time and
+effort.
+
+Despite of this, our collaborator Peter also [added a new
+function][rb_gc_mark_and_move], `rb_gc_mark_and_move`, as an alternative to
+calling `rb_gc_mark`, `rb_gc_mark_movable` and `rb_gc_location` directly:
+
+```c
+void rb_gc_mark_and_move(VALUE *ptr);
+```
+
+[rb_gc_mark_and_move]: https://github.com/ruby/ruby/pull/7140
+
+This function visits the field `*ptr`.  During the marking phase, it will read
+from the field; during compaction, it will update the content of the field.
+Using this function, it is possible to write one function, to handle both the
+marking and the updating of a given type.  The `rb_iseq_mark_and_update`
+function introduced in [the pull request][rb_gc_mark_and_move] is one example.
+With it, both `gc_mark_imemo` and `gc_ref_update_imemo` call the same function
+`rb_iseq_mark_and_update` instead of calling `rb_iseq_mark` and
+`rb_iseq_update_references` respectively.
+
+When       | function (before)           | function (after)
+---        | ---                         | ---
+marking    | `rb_iseq_mark`              | `rb_iseq_mark_and_update`
+compacting | `rb_iseq_update_references` | `rb_iseq_mark_and_update`
+
+This not only makes it easier to correctly implement types that support field
+updating, but also makes MMTk integration easier.  Because `rb_gc_mark_and_move`
+takes the *address* of the field (instead of value) as parameter, MMTk can
+intercept this function, and let the plan (GC algorithm) decide whether to read
+from field or update it as well.
+
+### Declarative marking
+
+Another alternative to writing marking and updating functions is using
+**declarative marking**.
+
+What the GC really need is identifying the *offsets* of reference fields of a
+give object.  We can give each type a list of offsets so that the GC can read
+and update fields at the given offsets.  The list can also be compressed into a
+bitmap.  VMs of statically typed languages, such as Java, usually have the
+capability of generating such lists (known as "object map") for their classes.
+
+Our collaborator Matt is working on [declarative marking][decl-mark-pr] for
+`rb_typed_data_struct`.  The developer provides an array to declare reference
+fields, for example:
+
+```c
+static const size_t enumerator_refs[] = {
+    RUBY_REF_EDGE(enumerator, obj),
+    RUBY_REF_EDGE(enumerator, args),
+    RUBY_REF_EDGE(enumerator, fib),
+    RUBY_REF_EDGE(enumerator, dst),
+    RUBY_REF_EDGE(enumerator, lookahead),
+    RUBY_REF_EDGE(enumerator, feedvalue),
+    RUBY_REF_EDGE(enumerator, stop_exc),
+    RUBY_REF_EDGE(enumerator, size),
+    RUBY_REF_EDGE(enumerator, procs),
+    RUBY_REF_END
+};
+```
+
+Then the `rb_typed_data_struct` no longer needs to provide the marking and
+compacting functions.
+
+```c
+static const rb_data_type_t enumerator_data_type = {
+    "enumerator",
+    {
+        NULL,                   // No marking function needed.
+        enumerator_free,
+        enumerator_memsize,
+        NULL,                   // No compacting function needed.
+    },
+    0,
+    (void *)enumerator_refs,
+    RUBY_TYPED_FREE_IMMEDIATELY
+    | RUBY_TYPED_DECL_MARKING   // This flag indicates declarative marking
+};
+```
+
+[decl-mark-pr]: https://github.com/ruby/ruby/pull/7153
+
+This approach has a limitation, though.  It is not suitable for handling
+dynamically-sized objects, such as arrays.  It is also not suitable if the type
+contains union fields which sometimes hold references and sometimes hold plain
+values.
+
+### What about other PPP types?
+
+A `Hash` instance pins its keys if it compares by identity.  It is because the
+current implementation uses object addresses as keys.  A wiser strategy is using
+**address-based hashing**.  It uses the object address as hash code, but when
+the object is moved, the GC saves the old address in a hidden field of the new
+object, and use the saved address as its "identity hash".  This preserves the
+"identity hash" of an object across copying GC.
+
+The real problem is `T_DATA` types defined by third-party C extensions.  Their
+types are not required to implement the compacting function.  Even if they
+do, the compacting function may contain arbitrary code, and there is no way
+to check if it updates every reference fields.  Until we give third-party C
+extensions some ways to declare their types never pin any object, we have to
+treat all unrecognised `T_DATA` as PPPs.
+
 
 <!--
 vim: tw=80
