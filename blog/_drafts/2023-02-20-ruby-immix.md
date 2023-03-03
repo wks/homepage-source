@@ -118,7 +118,7 @@ const rb_data_type_t foo_data_type = {
 };
 ```
 
-That's it!  Well, at least that's how we write C extensions 10 years ago.
+That's it!  Well, at least that's how we write C extensions 5 years ago.
 However, since CRuby introduced compacting GC, you should replace `rb_gc_mark`
 with `rb_gc_mark_movable`, and add an *updating function* that reassigns each
 `VALUE` field with the return value of `rb_gc_location`.
@@ -209,19 +209,26 @@ dead. The GC then goes through all allocated cells to find dead objects, and
 reclaim their cells.
 
 Later, people probably found that heap fragmentation was a problem.  CRuby
-developers then introduced compaction, making it a hybrid mark-sweep-compact GC.
-Unlike pure mark-compact algorithms, objects are still allocated from
-size-segregated free-lists.  It still does mark-sweep GC most of the time.  But
-when the user calls `GC.compact`, or if auto-compaction is enabled, the GC will
+developers then [introduced compaction][ruby-compaction], making it a hybrid
+mark-sweep-compact GC.  Unlike pure mark-compact algorithms, objects are still
+allocated from size-segregated free-lists.  It still does mark-sweep GC most of
+the time.  But when the user calls `GC.compact`, or if auto-compaction is
+enabled, the GC will
 
-1.  traverse the heap once to mark live object, and
-2.  go through all cells with live objects and move them to free pages, and
-3.  go through all cells with live objects again and update their reference
-    fields.
-    -   Note: After objects have been moved, pointers to the moved objects
-        need to point to their new addresses.
+1.  Traverse the heap once to mark live object.
+2.  Go through all cells with live objects and move the objects, leaving
+    "tombstones" (`T_MOVED`) in the original cells to indicate where the
+    original objects have been moved to.
+3.  Go through all live objects again to update their fields.
+    -   This mean if a field points to a cell that contains a tombstone
+        (`T_MOVED`), it will update the field so that it points to the new
+        addresses of the moved objects.
+4.  Go through cells that contain tombstones (`T_MOVED`) and reset them as free
+    cells.
 
 Then large chunks of memory can be returned to the operating system.
+
+[ruby-compaction]: https://bugs.ruby-lang.org/issues/15626
 
 <small>*I guess the nature of this GC algorithm explains why auto-compaction is
 disabled by default, because it allocates objects as slowly as mark-sweep, and
@@ -394,8 +401,8 @@ This is why the legacy `rb_gc_mark` function is implemented with
 CRuby has some built-in object types that have un-update-able fields.  They
 include:
 
--   Any object that uses "global instance variable table", or `global_ivtbl`.
--   `Hash` that has the `compare_by_identity` function called.
+-   Any object that uses "global instance variable table" (`global_ivtbl`).
+-   Any `Hash` instance that has the `compare_by_identity` method called.
 -   Some `T_IMEMO` types, including
     -   `imemo_ifunc`
     -   `imemo_memo`
@@ -417,12 +424,15 @@ the object address as the hash key of such hash tables.  If an object is moved,
 the hash code will change.  Therefore, the key has to be pinned.
 
 Other objects pin their children solely for historical reasons.  Examples
-include `imemo_iseq` and the `global_ivtbl`.  You may assume Ruby developers
-always keep built-in types up to date and make use of `rb_gc_mark_movable` and
-`rb_gc_location`, but it doesn't seem to be this case.  If there are not many
-instances of such objects, developers will tend to leave the code as is because
-the performance impact of not being able to move objects is small (at least it
-is small with the current GC which doesn't move objects by default).
+include `imemo_iseq` and the `global_ivtbl`.  We will later show that they don't
+have to pin their children.  Presumably, CRuby developers have full control over
+those built-in-types, and they can apply `rb_gc_mark_movable` and
+`rb_gc_location` to those types as long as copying GC was introduced.  In
+reality, this didn't happen.  I think it is related to the way compaction is
+used.  Auto-compaction is not enabled by default.  Manual compaction is usually
+called only once before forking a Ruby VM to reduce its memory footprint.  In
+such a use case, it will not be profitable to make every built-in type support
+object movement. 
 
 ## Supporting MMTk for CRuby, step by step
 
@@ -544,7 +554,7 @@ directly, or indirectly via `rb_gc_mark`, `gc_mark_maybe`, etc.
 PPPs include:
 
 -   All objects that use `global_ivtbl`.
--   All Hash that has `compare_by_identity` called.
+-   All `Hash` instances that have the `compare_by_identity` method called.
 -   Some `T_IMEMO` types, as discussed above.
 -   Some built-in `T_DATA` types.
 -   All third-part `T_DATA` types.
@@ -871,12 +881,83 @@ the object is moved, the GC saves the old address in a hidden field of the new
 object, and use the saved address as its "identity hash".  This preserves the
 "identity hash" of an object across copying GC.
 
-The real problem is `T_DATA` types defined by third-party C extensions.  Their
+The real problem is `T_DATA` types defined by third-party C extensions.  Those
 types are not required to implement the compacting function.  Even if they
 do, the compacting function may contain arbitrary code, and there is no way
 to check if it updates every reference fields.  Until we give third-party C
 extensions some ways to declare their types never pin any object, we have to
 treat all unrecognised `T_DATA` as PPPs.
+
+
+# Enabling copying GC
+
+With potential pinning parents (PPPs) recorded, we can give Immix a try.
+Compared with MarkSweep, we need to do more things.
+
+Before GC, we pin all objects pointed by un-update-able fields of recorded PPPs,
+regardless whether the PPPs are live or dead.
+
+When scanning machine stacks conservatively, we pin all objects pointed by
+conservative roots.
+
+When scanning an object, we call both `gc_mark_children` and
+`gc_update_object_references`.  This looks redundant, but it is necessary.
+Consider the following example,
+
+```c
+struct Foo {
+    VALUE x;
+    VALUE y;
+}
+
+void foo_mark(struct Foo *obj) {
+    rb_gc_mark_movable(obj->x);
+    rb_gc_mark(obj->y);
+}
+
+void foo_update(struct Foo *obj) {
+    obj->x = rb_gc_location(obj->x);
+    // skipped y
+}
+
+const rb_data_type_t foo_data_type = { ... };
+```
+
+The marking function pins `y`, therefore the updating function can skip `y`
+because it will not be moved.  It work well for mark-compact, but when using an
+evacuating GC, it is insufficient to call either of them alone.
+
+-   If we call `foo_mark` alone (via `gc_mark_children`), we can't update the
+    update-able field `x`;
+-   If we call `foo_update` alone (via `gc_update_object_references`), we can't
+    visit the field `y`, and the children of `y` will be considered dead if it
+    cannot be reached from elsewhere.
+
+Therefore it is necessary to call both `gc_mark_children` and
+`gc_update_object_references`.
+
+-   Calling `gc_mark_children` ensures all reference fields.
+-   Calling `gc_update_object_references` ensures all reference fields that can
+    be updated are updated.
+
+And we intercept `rb_gc_mark`, `rb_gc_mark_movable` and `rb_gc_location` so that
+all of them call the `trace_object` function in the MMTk core.
+
+**`trace_object`** is perhaps the most important function in a tracing garbage
+collector.  It visits an object.  If it is the first time the object is visited,
+it will mark or evacuate it, depending on the GC algorithm.  It return its new
+address (if moved).
+
+-   `rb_gc_location` will return the return value of `trace_object`, i.e. the
+    new address of the object.
+-   `rb_gc_mark` simply calls `trace_object` and ignores the return value
+    because the child object is already pinned.
+    -   *(Remember that any object that marks its field with `rb_gc_mark` is a
+        PPP.)*
+-   `rb_gc_mark_movable` simply calls `trace_object` and ignores the return
+    value, too, because we know we will call `gc_update_object_references`
+    later.
+
 
 
 <!--
