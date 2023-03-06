@@ -958,7 +958,81 @@ address (if moved).
     value, too, because we know we will call `gc_update_object_references`
     later.
 
+By wiring CRuby's marking/updating functions to MMTk's `trace_object`, I expect
+that Immix should work.  But it still doesn't.
 
+## Assertions and cleaning-up operations during marking
+
+CRuby has a strong assumption that objects do not move during the marking phase.
+Here is one example:
+
+```c
+cc_table_mark_i(ID id, VALUE ccs_ptr, void *data_ptr)
+{
+    struct cc_tbl_i_data *data = data_ptr;
+    struct rb_class_cc_entries *ccs = (struct rb_class_cc_entries *)ccs_ptr;
+    VM_ASSERT(vm_ccs_p(ccs));
+    VM_ASSERT(id == ccs->cme->called_id);
+
+    if (METHOD_ENTRY_INVALIDATED(ccs->cme)) {
+        rb_vm_ccs_free(ccs);        // ERROR
+        return ID_TABLE_DELETE;
+    }
+    else {
+        gc_mark(data->objspace, (VALUE)ccs->cme);
+
+        for (int i=0; i<ccs->len; i++) {
+            VM_ASSERT(data->klass == ccs->entries[i].cc->klass);        // ERROR
+            VM_ASSERT(vm_cc_check_cme(ccs->entries[i].cc, ccs->cme));   // ERROR
+
+            gc_mark(data->objspace, (VALUE)ccs->entries[i].ci);
+            gc_mark(data->objspace, (VALUE)ccs->entries[i].cc);
+        }
+        return ID_TABLE_CONTINUE;
+    }
+}
+```
+
+Two parts of this function can only work if objects are not moved.
+
+1.  The call to `rb_vm_ccs_free(ccs);`
+2.  The two assertions:
+    -   `VM_ASSERT(data->klass == ccs->entries[i].cc->klass);`
+    -   `VM_ASSERT(vm_cc_check_cme(ccs->entries[i].cc, ccs->cme));`
+
+They are broken because they access the children of the current object.
+
+`ccs->entries[i].cc` may point to another heap object.  Remember that Immix
+moves objects when visiting an object for the first time.  If the object pointed
+by `ccs->entries[i].cc` has been visited before, the GC will copy the content of
+that object to a new location, leaving a "tombstone" (a forwarding address) at
+its original location.  This will overwrite some of the object's fields.  The
+`cc->klass` field may have been overwritten, and it is not safe for the
+application to inspect its content.
+
+In theory, the GC is allowed to erase the entire from-space object when it is
+moved.  Currently, I choose to let the GC overwrite the `RBasic::flags` field to
+store the forwarding pointer, so the `klass` field is actually not overwritten.
+However, even if the `cc->klass` fields are not overwritten, the `Class` object
+it points to may have been moved by the GC.  Other code that performs assertions
+on object types usually fail, and I have to disable those assertions one by one.
+
+What about the `rb_vm_ccs_free` call?
+
+The `rb_vm_ccs_free` function is intended to clean up the `ccs` when
+invalidated.  It fails because it accesses `ccs->entries[i].cc`, too.  But I
+also think it is abusing the marking phase of GC to clean up non-memory
+resources.  It is the responsibility of the **finalization** mechanism to clean
+up such resources.
+
+## Global weak tables
+
+There are some global tables in CRuby that 
+
+
+## What can we run so far?
+
+With the changes I made so far, 
 
 <!--
 vim: tw=80
