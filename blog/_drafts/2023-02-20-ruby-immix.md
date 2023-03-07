@@ -1039,8 +1039,32 @@ up such resources.
 
 ## Global weak tables and finalization
 
+**NOTE: This section itself may deserve one blog post.  It is not directly
+related to copying GC, as we still need the finalization mechanism for
+MarkSweep.  To explain why we need to handle weak tables differently than
+vanilla CRuby, we need to explain the problem with `obj_free`, and the GC phases
+(i.e. work bucket stages) of of MMTk.  That would probably also lead to the
+discussion about disjoint objects.  We may delete this section.**
+
 There are some global tables in CRuby that fit the definition of weak hash
 tables.  Such tables include:
+
+-   `frozen_strings`: the "fstring" table
+-   `finalizer_table`: the finalizer table
+-   `global_iv_tbl_`: the global instance variable table
+-   `obj_to_id_tbl`: object to ID table
+-   `id_to_obj_tbl`: ID to object table
+
+Those tables are not part of the root set, and therefore do not guarantee their
+entries will point to live object after GC.  If any entry of those tables point
+to a dead object after GC, that entry needs to be removed.
+
+For example, if the ID of an object is ever observed (via the `Object#object_id`
+method), a bi-directional mapping is inserted to both `obj_to_id_tbl` and
+`id_to_obj_tbl`.  In CRuby, the `obj_free` function checks the `FL_SEEN_OBJ_ID`
+flag, and removes the object from both `obj_to_id_tbl` and `id_to_obj_tbl`.
+
+With MMTk, we take a different approach.  We
 
 
 ## What can we run so far?
