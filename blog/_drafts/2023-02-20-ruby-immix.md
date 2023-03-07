@@ -1037,15 +1037,92 @@ But I also think it is abusing the marking phase of GC to clean up non-memory
 resources.  It is the responsibility of the **finalization** mechanism to clean
 up such resources.
 
-## Global weak tables and finalization
 
-There are some global tables in CRuby that fit the definition of weak hash
-tables.  Such tables include:
+# Results
 
+The code is hosted on GitHub.
 
-## What can we run so far?
+-   mmtk-ruby: https://github.com/mmtk/mmtk-ruby
+-   ruby: https://github.com/mmtk/ruby
 
-With the changes I made so far, 
+You can give it a try by cloning those repositories and following the
+[README.md][mmtk-ruby-readme] file in the `mmtk/mmtk-ruby` repository.
+
+[mmtk-ruby-readme]: https://github.com/mmtk/mmtk-ruby/blob/master/README.md
+
+So far, I managed to let `miniruby` pass all the bootstrap tests.  You can try
+it by running:
+
+```bash
+make btest RUN_OPTS=--mmtk-plan=Immix
+```
+
+# Lessons learned
+
+Probably the worst thing a VM can do about GC is making too many assumptions
+about the GC algorithm it is using.
+
+CRuby started with mark-sweep.  Mark-sweep never moves objects.  Because of
+this, it is sufficient to read from reference fields of objects without updating
+them during GC.  It is safe to navigate through object references to do
+assertions on the children of an object, or doing clean-up work during GC.
+
+What's worse, assumptions can leak.  The `dmark` function is part of the C
+extension API.  It allows third-party extensions to execute arbitrary code in
+it, with the only obligation to call `rb_gc_mark` on the *values* of its
+reference fields.
+
+While it worked well when CRuby used mark-sweep, it made supporting other GC
+algorithms difficult.
+
+Later, CRuby introduced compaction, but much of the code in CRuby core and all
+third-party C extensions already made the assumption that objects never move and
+a `dmark` function is sufficient.  CRuby had to work around this by introducing
+object pinning, and hiding object pinning underneath the `rb_gc_mark` function.
+
+And the assumption of "GC has a marking phase and a compaction phase" also
+leaked.  Now both the `dmark` and the `dcompact` functions are exposed to
+third-party C extensions.  The `dcompact` function is obliged to update some but
+not all of its reference fields with `rb_gc_location`, skipping pinned fields.
+
+Later, I introduced Immix, an evacuating GC, to CRuby.  And I had to work this
+around by calling both `gc_mark_children` and `gc_update_object_references` on
+every object.  I also had to identify "potential pinning parents" to work around
+objects that cannot update some of its fields.
+
+Why do we end up with so many quirks?  Can't CRuby just let `T_DATA` provide a
+general-purpose field visitor that visits fields with something like
+`rb_gc_mark_and_move(VALUE*)`, or use "declarative marking" in the first place?
+
+Well, I guess Ruby wasn't designed for those who knows "By doing this, the
+machine will run fast, run more effectively, or something something something."
+If "calling `rb_gc_mark` on reference fields" is easy enough for average
+programmers to understand, they will probably be happy with it, and such an API
+would probably work well from 1995 to 2019.
+
+But, as [this paper][JBH11] pointed out, *language implementers who are serious
+about correctness and performance need to understand deferred gratification*.
+If CRuby had a better GC interface, it would have been much easier to support
+other GC algorithms.  Implementing a high-performance VM requires much
+expertise.  Even if the VM developers want to make average programmers happy,
+they should design the API in such a way that it is easy to do things right, and
+hard (if possible at all) to do things wrong.
+
+[JBH11]: https://users.cecs.anu.edu.au/~steveb/pubs/papers/php-mspc-2011.pdf
+
+But I still feel lucky that CRuby didn't start with naive reference counting
+(RC) like CPython did.  If CRuby used naive RC, the performance would be
+hopeless as the INC and DEC operations would dominate the execution time [like
+in Swift][UGF17].  And it would be impossible to even migrate to mark-sweep,
+and get stuck with naive RC [like Pyston][pyston-0.5].  The choice of
+conservative stack scanning is also lucky because we found ways to reach
+remarkable performance with [RC-Immix and conservative stack scanning][SBM14].
+
+[UGF17]: https://dl.acm.org/doi/10.1145/3133841.3133843
+[pyston-0.5]: https://blog.pyston.org/2016/05/25/pyston-0-5-released/
+[SBM14]: https://users.cecs.anu.edu.au/~steveb/pubs/papers/consrc-oopsla-2014.pdf
+
+Anyway, CRuby still has hope.  Let's keep working on it.
 
 <!--
 vim: tw=80
