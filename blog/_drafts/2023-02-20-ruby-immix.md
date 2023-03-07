@@ -961,10 +961,10 @@ address (if moved).
 By wiring CRuby's marking/updating functions to MMTk's `trace_object`, I expect
 that Immix should work.  But it still doesn't.
 
-## Assertions and cleaning-up operations during marking
+## Assertions during marking
 
-CRuby has a strong assumption that objects do not move during the marking phase.
-Here is one example:
+CRuby performs various assertions about object consistency during the marking
+phase.  Here is one example:
 
 ```c
 cc_table_mark_i(ID id, VALUE ccs_ptr, void *data_ptr)
@@ -993,41 +993,54 @@ cc_table_mark_i(ID id, VALUE ccs_ptr, void *data_ptr)
 }
 ```
 
-Two parts of this function can only work if objects are not moved.
+Let's ignore `rb_vm_ccs_free` for now.
 
-1.  The call to `rb_vm_ccs_free(ccs);`
-2.  The two assertions:
-    -   `VM_ASSERT(data->klass == ccs->entries[i].cc->klass);`
-    -   `VM_ASSERT(vm_cc_check_cme(ccs->entries[i].cc, ccs->cme));`
+Two of the assertions in this function only works if the GC doesn't move
+objects.
 
-They are broken because they access the children of the current object.
+-   `VM_ASSERT(data->klass == ccs->entries[i].cc->klass);`
+-   `VM_ASSERT(vm_cc_check_cme(ccs->entries[i].cc, ccs->cme));`
+
+They will lead to assertion failures or even crashes because they access the
+children of the current object (the class or module object that owns the current
+`ccs`), and the children may have been moved.
 
 `ccs->entries[i].cc` may point to another heap object.  Remember that Immix
 moves objects when visiting an object for the first time.  If the object pointed
-by `ccs->entries[i].cc` has been visited before, the GC will copy the content of
-that object to a new location, leaving a "tombstone" (a forwarding address) at
-its original location.  This will overwrite some of the object's fields.  The
+by `ccs->entries[i].cc` was visited before, the GC would have copied the content
+of that object to a new location, leaving a "tombstone" (a forwarding address)
+at its original location.  This will overwrite some of the object's fields.  The
 `cc->klass` field may have been overwritten, and it is not safe for the
 application to inspect its content.
 
+There are other functions in CRuby that do assertions on children during GC,
+such as [`gc_mark_imemo` for `imemo_env`][gc-mark-imemo-assert] and
+[`VM_ENV_ENVVAL`][vm-env-envval-assert].  I have to disable those assertions
+[one][disable-assertion1] by [one][disable-assertion2].
+
+[gc-mark-imemo-assert]: https://github.com/ruby/ruby/blob/dc33d32f12689dc5f29ba7bf7bb0c870647ca776/gc.c#L7202
+[vm-env-envval-assert]: https://github.com/ruby/ruby/blob/dc33d32f12689dc5f29ba7bf7bb0c870647ca776/vm_core.h#L1404
+[disable-assertion1]: https://github.com/mmtk/ruby/commit/364e91963354ef20b3f02323880a2a13f8043d20
+[disable-assertion2]: https://github.com/mmtk/ruby/commit/cd03778b79700cdbca93fbcb733a71d19267c25a
+
 In theory, the GC is allowed to erase the entire from-space object when it is
-moved.  Currently, I choose to let the GC overwrite the `RBasic::flags` field to
-store the forwarding pointer, so the `klass` field is actually not overwritten.
-However, even if the `cc->klass` fields are not overwritten, the `Class` object
-it points to may have been moved by the GC.  Other code that performs assertions
-on object types usually fail, and I have to disable those assertions one by one.
+moved.  For this reason, we should remove all assertions that access any
+children of an object during GC.
 
-What about the `rb_vm_ccs_free` call?
+## Cleaning-up operations during marking
 
-The `rb_vm_ccs_free` function is intended to clean up the `ccs` when
-invalidated.  It fails because it accesses `ccs->entries[i].cc`, too.  But I
-also think it is abusing the marking phase of GC to clean up non-memory
+The function call `rb_vm_ccs_free(ccs);` mentioned in the last section is
+intended to clean up the `ccs` when invalidated.  It accesses
+`ccs->entries[i].cc`, too, and it will crash if `cc` has been moved.
+
+But I also think it is abusing the marking phase of GC to clean up non-memory
 resources.  It is the responsibility of the **finalization** mechanism to clean
 up such resources.
 
-## Global weak tables
+## Global weak tables and finalization
 
-There are some global tables in CRuby that 
+There are some global tables in CRuby that fit the definition of weak hash
+tables.  Such tables include:
 
 
 ## What can we run so far?
