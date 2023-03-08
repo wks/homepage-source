@@ -972,10 +972,10 @@ cc_table_mark_i(ID id, VALUE ccs_ptr, void *data_ptr)
     struct cc_tbl_i_data *data = data_ptr;
     struct rb_class_cc_entries *ccs = (struct rb_class_cc_entries *)ccs_ptr;
     VM_ASSERT(vm_ccs_p(ccs));
-    VM_ASSERT(id == ccs->cme->called_id);
+    VM_ASSERT(id == ccs->cme->called_id);       // ERROR
 
     if (METHOD_ENTRY_INVALIDATED(ccs->cme)) {
-        rb_vm_ccs_free(ccs);        // ERROR
+        rb_vm_ccs_free(ccs);                    // ERROR
         return ID_TABLE_DELETE;
     }
     else {
@@ -995,9 +995,10 @@ cc_table_mark_i(ID id, VALUE ccs_ptr, void *data_ptr)
 
 Let's ignore `rb_vm_ccs_free` for now.
 
-Two of the assertions in this function only works if the GC doesn't move
+Three of the assertions in this function only works if the GC doesn't move
 objects.
 
+-   `VM_ASSERT(id == ccs->cme->called_id)`;
 -   `VM_ASSERT(data->klass == ccs->entries[i].cc->klass);`
 -   `VM_ASSERT(vm_cc_check_cme(ccs->entries[i].cc, ccs->cme));`
 
@@ -1005,13 +1006,13 @@ They will lead to assertion failures or even crashes because they access the
 children of the current object (the class or module object that owns the current
 `ccs`), and the children may have been moved.
 
-`ccs->entries[i].cc` may point to another heap object.  Remember that Immix
-moves objects when visiting an object for the first time.  If the object pointed
-by `ccs->entries[i].cc` was visited before, the GC would have copied the content
-of that object to a new location, leaving a "tombstone" (a forwarding address)
-at its original location.  This will overwrite some of the object's fields.  The
-`cc->klass` field may have been overwritten, and it is not safe for the
-application to inspect its content.
+`ccs->cme` and `ccs->entries[i].cc` may point to another heap object.  Remember
+that Immix moves objects when visiting an object for the first time.  If the
+object pointed by `ccs->entries[i].cc` was visited before, the GC would have
+copied the content of that object to a new location, leaving a "tombstone" (a
+forwarding address) at its original location.  This will overwrite some of the
+object's fields.  The `cc->klass` field may have been overwritten, and it is not
+safe for the application to inspect its content.
 
 There are other functions in CRuby that do assertions on children during GC,
 such as [`gc_mark_imemo` for `imemo_env`][gc-mark-imemo-assert] and
