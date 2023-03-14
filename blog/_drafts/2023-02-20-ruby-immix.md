@@ -31,14 +31,15 @@ implementation, and how bad they are for supporting new GC algorithms.
 Ruby, a language for humans, has attracted millions of programmers around the
 world with its elegant syntax and extensibility.  If you want a dynamic web
 site, you can prototype it in an hour using the Ruby on Rails framework.  If you
+are a blogger like me, you can use Jekyll to render your posts to HTML. If you
 only want a little script to count words in a text file, its built-in regular
 expression support makes it handy.
 
 If you want to use your favourite C library in Ruby, that's OK, too. You can
-implement your Ruby module in C!  Just (1) define a Ruby class, (2) define an
-`rb_data_type_t`, and (3) define a C struct.  Then you call
-`TypedData_Make_Struct` and...  Voila! Your shiny new Ruby object backed by a C
-struct!
+implement your Ruby module in C!  Just (1) define your own C struct, (2) define
+an `rb_data_type_t`, and (3) define a Ruby class.  Then you call
+`TypedData_Make_Struct` and...  Voila! Your shiny new Ruby object backed by a
+custom C struct!
 
 <small>*(Note: I intentionally omitted the [`ffi`][ffi] module.  Personally, I
 prefer `ffi` over C extensions, but `ffi` is not related to the GC or object
@@ -59,9 +60,9 @@ object, and (3) how to...
 [liquid-c-performance]: https://github.com/Shopify/liquid-c#performance
 
 Wait!  What is garbage collection?  What is marking?  Why does the GC move
-objects?
+objects at all?
 
-And why would I care about those VM implementation details?  We are humans, not
+And why should I care about those VM implementation details?  We are humans, not
 machines, aren't we?
 
 # No peaceful world
@@ -75,9 +76,10 @@ machines, aren't we?
 Ruby programmers don't need to worry about freeing their objects because the
 garbage collector takes care of reclaiming unused objects.
 
-If you instantiate classes written in Ruby, the CRuby runtime knows where
-instance variables are held, and the GC can traverse from the object to its
-children.
+If you instantiate classes implemented in the Ruby language, the object layout
+will be the well-known `struct RObject`.  CRuby knows where it holds instance
+variables, and the GC can follow those reference fields to traverse the object
+graph.
 
 <small>*(I bet you don't know that CRuby sometimes stores instance variables in
 a global hash table outside the object.  It's called a "GLOBAL Instance Variable
@@ -91,8 +93,8 @@ their reference fields][gc_update_object_references].
 [gc_mark_children]: https://github.com/ruby/ruby/blob/693e4dec236e14432df97010082917a3a48745cb/gc.c#L7242
 [gc_update_object_references]: https://github.com/ruby/ruby/blob/693e4dec236e14432df97010082917a3a48745cb/gc.c#L10550
 
-But if you define you own Ruby type backed by your own C struct, CRuby doesn't
-know its layout.  You have to teach CRuby how to scan them.
+But if you define you own Ruby type backed by your own C struct, CRuby won't
+know its layout unless you teach CRuby how to scan it.
 
 How?
 
@@ -119,9 +121,12 @@ const rb_data_type_t foo_data_type = {
 ```
 
 That's it!  Well, at least that's how we write C extensions 5 years ago.
-However, since CRuby introduced compacting GC, you should replace `rb_gc_mark`
-with `rb_gc_mark_movable`, and add an *updating function* that reassigns each
-`VALUE` field with the return value of `rb_gc_location`.
+However, since CRuby [introduced compacting GC in 2019][ruby-compaction], you
+should replace `rb_gc_mark` with `rb_gc_mark_movable`, and add an *updating
+function* that reassigns each `VALUE` field with the return value of
+`rb_gc_location`.
+
+[ruby-compaction]: https://bugs.ruby-lang.org/issues/15626
 
 ```c
 struct Foo {
@@ -147,10 +152,10 @@ const rb_data_type_t foo_data_type = {
 };
 ```
 
-That's confusing.  What does `rb_gc_mark` do?  What's the difference between
-`rb_gc_mark` and `rb_gc_mark_movable`?  And why do we need an update function
-too?  I have heard Python programmers doing "INC" and "DEC" operations all the
-time.  Why don't we need them in Ruby?
+That's confusing.  What exactly do `rb_gc_mark` and `rb_gc_mark_movable` do?
+How are they different?  And why do we need an update function too?  I have
+heard Python programmers doing "INC" and "DEC" operations all the time.  Why
+don't we need them in Ruby?
 
 To understand these issues, we need to understand the differences between GC
 algorithms.
@@ -178,21 +183,38 @@ Let's compare mark-sweep, mark-compact and semispace, and ignore naive RC and
 Immix for now.  All of them use tracing to identify garbage, and their
 difference lies in their allocators.
 
--   Mark-sweep uses a *free-list allocator*.  Free-list allocation is slow, but
-    dead objects can be simply added back to the free-list, which is fast.  It
-    never moves any object, which saves time, but can cause heap fragmentation.
--   Mark-compact and semispace use a *bump-pointer allocator*.  Bump allocation
-    is fast, but it can only allocate into a contiguous region of free space.
-    Therefore, those collectors need to move objects to defragment the heap,
-    which is slow.
-    -   Mark-compact does this by *compacting*, that is, moving all live objects
-        to one side of the heap so that the rest of the heap is a contiguous
-        region of free space.  This is extremely slow because it needs to avoid
-        overwriting other live objects while moving objects.
-    -   Semispace does this by *evacuating* all live objects to the other half
-        of the heap memory, and freeing the entire old half at once.  This is
-        not as slow as compacting, but Semispace can only utilise 50% of the
-        total heap space.
+Mark-sweep uses a *free-list allocator*.
+
+-   Free-list allocation is slow, because it needs to find an appropriate slot
+    in an appropriate free list.
+-   Collection is fast because dead objects can be simply added back to the
+    free-list.
+-   Mark-sweep never moves object.  It saves time, but can lead to heap
+    fragmentation in the long run.  When that happens, the allocator will not be
+    able to allocate a slightly bigger object even though there are many small
+    gaps between objects.
+
+Mark-compact and semispace use a *bump-pointer allocator*.
+
+-   Bump-pointer allocation is fast, because it only needs to increment a
+    cursor.
+-   Bump-pointer allocator can only allocate into a contiguous region of free
+    space.
+
+Defragmentation makes a contiguous region so that bump-pointer allocators can
+allocate into.  It comes at a cost, but the profit of being able to use the fast
+bump-pointer allocator compensates for the cost.  It also solves the heap
+fragmentation problem.
+
+There are two basic ways of doing defragmentation.
+
+-   Mark-compact does this by *compacting*, that is, moving all live objects to
+    one side of the heap so that the rest of the heap is a contiguous region of
+    free space.  This is extremely slow because it needs to avoid overwriting
+    other live objects while moving objects.
+-   Semispace does this by *evacuating* all live objects to the other half of
+    the heap memory, and freeing the entire old half at once.  This is faster
+    than compacting, but Semispace can only utilise 50% of the total heap space.
 
 Mark-sweep, mark-compact and semispace represent the three basic ways of
 reclaiming used memory, i.e. *sweeping to free-list*, *compacting* and
@@ -217,18 +239,13 @@ enabled, the GC will
 
 1.  Traverse the heap once to mark live object.
 2.  Go through all cells with live objects and move the objects, leaving
-    "tombstones" (`T_MOVED`) in the original cells to indicate where the
-    original objects have been moved to.
-3.  Go through all live objects again to update their fields.
-    -   This mean if a field points to a cell that contains a tombstone
-        (`T_MOVED`), it will update the field so that it points to the new
-        addresses of the moved objects.
+    "tombstones" (`T_MOVED`) in the original cells.  A tombstone contains a
+    "forwarding pointer" to where the original object has been moved to.
+3.  Go through all live objects again to update their fields.  If any field
+    points to a tombstone (`T_MOVED`), it will be updated to the new address of
+    the moved object.
 4.  Go through cells that contain tombstones (`T_MOVED`) and reset them as free
     cells.
-
-Then large chunks of memory can be returned to the operating system.
-
-[ruby-compaction]: https://bugs.ruby-lang.org/issues/15626
 
 <small>*I guess the nature of this GC algorithm explains why auto-compaction is
 disabled by default, because it allocates objects as slowly as mark-sweep, and
@@ -236,15 +253,15 @@ compacts the heap as extremely slowly as mark-compact.*</small>
 
 ## GC and Ruby's C extension API
 
-You see.  The GC algorithm CRuby uses dictates the design of Ruby's C extension
-API:
+You see, what GC algorithm CRuby uses determines what functions CRuby's C
+extension API exposes.  Concretely,
 
 -   When CRuby used mark-sweep, *marking functions* were sufficient.
     -   Inside marking functions, the idiomatic `rb_gc_mark(obj->x);` statement
         gives the GC the field value without updating the field.
 -   After compaction was introduced, *updating functions* were needed, too.
-    -   Inside updating functions, the `rb_gc_location` function gets the new
-        location of an object, and the idiomatic statement `obj->x =
+    -   Inside updating functions, the `rb_gc_location` function looks up the
+        new location of an object, and the idiomatic statement `obj->x =
         rb_gc_location(obj->x);` updates the field by assigning the return value
         back to the field.
 
@@ -262,39 +279,60 @@ current CRuby GC.)*<small>
 
 ### Legacy gems
 
-The bad news is, even today, there are still lots of third-part Ruby libraries
-which were developed before Ruby had compacting GC, and still do not have
-updating functions. CRuby developers decided to maintain compatibility with
-those legacy libraries.
+The bad news is, many third-party Ruby libraries were developed before CRuby
+introduced compacting GC.  Even today, many of them  still do not provide
+updating functions.
 
--   The semantics of the publicly exposed `rb_gc_mark` function was changed so
+<small>*For example, no C-extension types in [this library][liquid-c] have any
+updating functions.  See [this][liquid-c1], [this][liquid-c2] and
+[this][liquid-c3] type.*</small>
+
+[liquid-c1]: https://github.com/Shopify/liquid-c/blob/0b259bfc259280c76233f2d8c15ad7256abe7e75/ext/liquid_c/document_body.c#L36
+[liquid-c2]: https://github.com/Shopify/liquid-c/blob/0b259bfc259280c76233f2d8c15ad7256abe7e75/ext/liquid_c/expression.c#L28
+[liquid-c3]: https://github.com/Shopify/liquid-c/blob/0b259bfc259280c76233f2d8c15ad7256abe7e75/ext/liquid_c/block.c#L79
+
+CRuby developers decided to maintain compatibility with those legacy libraries.
+
+1.  The semantics of the publicly exposed `rb_gc_mark` function was changed so
     that it not only marks the object, but also **pins** it.
--   A new function `rb_gc_mark_movable` was introduced.  It marks the object,
+2.  A new function `rb_gc_mark_movable` was introduced.  It marks the object,
     but does not pin it.
 
-Then during compaction, objects marked with `rb_gc_mark` will stay in place,
-while other objects can be freely moved. By doing so, legacy C extensions can
-keep working without updating fields because children objects are guaranteed not
-to move.  Newer C extensions can enjoy the benefit of defragmentation by marking
-the children movable.  There is some performance penalty because some objects
-cannot be moved.  Despite of that, it works.
+During the marking phase, all objects marked by the existing `rb_gc_mark` call
+sites in the legacy libraries are pinned.  Then during compaction, the GC can
+move all other objects except those pinned by `rb_gc_mark`.  By doing so, legacy
+C extensions can keep working without being aware of object movement, because no
+objects they point to ever move.  On the other hand, newer C extensions can
+enjoy the benefit of defragmentation by marking the children movable.
 
+Now that we know what kind of GC CRuby is using, we move on to our protagonist,
+MMTk.
 
 # MMTk
 
-For those who don't know yet, [MMTk] was part of JikesRVM and is now a
-VM-independent Rust library.  It is a framework for garbage collection.  It
-contains abstractions of spaces, allocators, tracing, metadata, etc.  It also
-has a powerful work packet scheduler for multi-threaded GC.  Its VM binding API
-makes the boundary between MMTk and the VM clear and efficient.  Currently, MMTk
-includes several canonical GC algorithms (we call them "plans" in MMTk), such as
-NoGC, MarkSweep, MarkCompact, Semispace, GenCopy, as well as productional ones
-such as Immix and GenImmix.
+For those who don't know yet, [MMTk] is a framework for garbage collection.  It
+contains abstract components, such as spaces, allocators, tracing, metadata,
+etc., for building garbage collectors.  It also has a powerful work packet
+scheduler for multi-threaded GC.  Currently, MMTk includes several canonical GC
+algorithms, such as MarkSweep, MarkCompact, Semispace and GenCopy, productional
+ones such as Immix, GenImmix and StickyImmix, as well as algorithms useful for
+debugging, such as NoGC and PageProtect.
+
+[MMTk]: https://www.mmtk.io/
 
 <small>*(Yes. NoGC is a GC algorithm that never reclaims any memory and crashes
 when memory is exhausted.  It's known as "epsilon GC" in OpenJDK.)*</small>
 
-[MMTk]: https://www.mmtk.io/
+MMTk was part of JikesRVM, but is now a VM-independent Rust library.  This makes
+MMTk able to profit both VM developers and GC researchers.
+
+-   GC researchers can develop a new GC algorithm on MMTk and try it out on
+    multiple VMs, while
+-   VMs that use MMTk can gain access to the efficient garbage collection
+    algorithms MMTk has now, or will have in the future.
+
+The interface between MMTk and VMs is defined by a bi-directional "VM-binding"
+API, making the boundary of MMTk and VM clear and efficient.
 
 I have been working on [mmtk-ruby], the VM binding for CRuby, so that CRuby can
 use MMTk as its garbage collector.  Following [Angus Atkinson][angus-homepage]'s
@@ -320,12 +358,13 @@ step, we disable the VM's existing GC, and hijack the VM's object allocation
 mechanism so that it allocates using MMTk.  Although NoGC is not a realistic GC
 algorithm, this step helps us identify the boundary between the VM and the GC.
 And it is the easiest.  The VM just calls the `mmtk::memory_manager::alloc`
-function, and it should just work... well... until the memory is exhausted.
-Despite of this, Angus managed to run a Rails web server with NoGC.
+function to allocate object, and it should just work... well... until the memory
+is exhausted.  Despite of this, Angus managed to run a Rails web server with
+MMTk and NoGC.
 
 The next step is supporting MarkSweep.  MarkSweep is a non-moving collector, so
 we only need to focus on identifying garbage and not worry about pointer
-updating at this moment.  The VM needs to implement a stop-the-world mechanism
+updating at this moment.  The VM needs to implement a "stop-the-world" mechanism
 to stop all mutator threads when GC is triggered, a root scanner to visit roots
 on the stack as well as in global data structures, and an object scanner that
 identifies reference fields in any given object.
@@ -337,23 +376,31 @@ copy a given object.  If the VM doesn't assume the GC never moves object, this
 step should be trivial; but if not, this step could be painful.
 
 The fourth step is supporting GenCopy, the generational copying collector with a
-Semispace mature space.  This collector requires write barrier.  MMTk provides
+Semispace mature space.  This collector requires a write barrier.  MMTk provides
 the write barrier implementation, exposed as
 `mmtk::memory_manager::object_reference_write`, and the VM needs to ensure it is
-called whenever writing a reference field.
+called whenever writing a reference field.  Missing a write barrier invocation
+may cause a young object to be erroneously reclaimed.
 
 With stop-the-world, root scanning, object scanning, object copying and write
 barriers handled, the VM should be able to use other GC algorithms MMTk
 provides, too, such as Immix and GenImmix.  
 
-The fifth step is supporting fast paths.  This is an optimisation.  For
-performance reasons, the VM should inline the commonly executed fast paths of
-object allocation and write barriers... well... if it care about performance.
+The fifth step is optimising for fast paths.  "Fast paths" here refer to the
+most commonly executed code paths of allocation and write barriers.  For
+example, the fast path of a bump-pointer allocation is incrementing the cursor
+and checking whether it has exceeded a given limit.  If it has, it should jump
+to the slow path which is usually implemented out of line as a function.
+Because the fast paths are executed very often, VMs should JIT-compile and
+inline the fast paths of object allocation and write barriers... if they care
+about performance.
+
 
 # MMTk and CRuby
 
-Great!.  Let's use MMTk for CRuby, and make all of its GC algorithms available
-for CRuby!
+We have discussed what MMTk is, and how to let a VM use MMTk.
+
+Let's use MMTk for CRuby, and make all of its GC algorithms available for CRuby!
 
 Unfortunately, there is a catch.  CRuby needs object pinning, and that limits
 what GC algorithms we can use.
@@ -364,14 +411,15 @@ Why does CRuby pin objects?
 
 ### Conservative stack scanning
 
-CRuby is, as the name suggests, written in C.  Methods of built-in types and
-types in C extensions can be implemented in C.  CRuby allows C local variables
-to hold references to Ruby objects using the `VALUE` type.  A `VALUE` can be a
-direct pointer to a heap object, without using any indirection table (like
-OpenJDK and Lua) or reference counting (like CPython).  Here comes the problem:
-C compilers cannot generate stack maps (the metadata that records "which offsets
-of a frame contain references").  How can the GC find object references on the
-stack?
+CRuby is, as the name suggests, written in C.  CRuby implements some Ruby
+functions using C functions, and may hold references to Ruby objects in C local
+variables (the `VALUE` type).  Those are direct pointers to Ruby heap objects,
+without any indirection tables (like OpenJDK and Lua) or reference counting
+(like CPython).
+
+Here comes the problem: C compilers cannot generate stack maps
+(the metadata that records "which offsets of a frame contain references").  How
+can the GC find object references on the stack?
 
 CRuby scans stacks conservatively.  It assumes that every word on the stack can
 *potentially* be a reference.  If a word *happens to* be the address to an
