@@ -5,6 +5,9 @@ on:
     branches:
       - master
 
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
 jobs:
   build_and_deploy:
     name: "Build site and deploy"
@@ -12,16 +15,22 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     - name: Set up Ruby and install bundle packages
       uses: ruby/setup-ruby@v1
       with:
         ruby-version: "3.1"
         bundler-cache: true
+        cache-version: 0 # Increment this number if you need to re-download cached gems
+
+    - name: Override site.url
+      run: sed 's;URL;https://wks.github.io;' < _config.url_override.template.yml > _config.url_override.yml
         
     - name: Build with Jekyll
-      run: bundle exec jekyll build
+      run: bundle exec jekyll build --config _config.yml,_config.url_override.yml
+      env:
+        JEKYLL_ENV: production
 
     - name: List files in _site for debugging
       run: find ./_site
