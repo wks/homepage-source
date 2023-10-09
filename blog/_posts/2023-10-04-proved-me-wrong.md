@@ -274,33 +274,34 @@ binding][mmtk-ruby].
 
 [mmtk-ruby]: https://github.com/mmtk/mmtk-ruby
 
-For example, if you see the following timeline, you know the handling of
-`obj_free` is the bottleneck.
+For example, when I saw the following timeline, I knew the handling of
+`obj_free` was the bottleneck.
 
 ![`obj_free` was the bottleneck in MMTk-Ruby]({% link /assets/img/proved-me-wrong/ruby-obj-free.png %})
 
-When I see the following timeline (with manual annotation of which work packet
-created which), I know the load balancing of the transitive closure stage needs
+When I saw the following timeline (with manual annotation of which work packet
+created which), I knew the load balancing of the transitive closure stage needed
 to be improved.
 
 ![bad load-balance during transitive closure]({% link /assets/img/proved-me-wrong/ruby-load-balance.png %})
 
-And when I see the following timeline, I know the general load balancing is
-improved, but some objects take significantly longer to scan than other objects,
-and we should focus on those objects because they are the bottleneck.
+And when I saw the following timeline, I knew the general load balancing was
+improved, but some objects took significantly longer to scan than other objects,
+and I should focus on those objects because they were the bottleneck.
 
 ![some objects took longer to scan]({% link /assets/img/proved-me-wrong/ruby-scan-object.png %})
 
 ## The tool
 
-I thank Claire Huang, [Zixian Cai] and Prof. [Steve Blackburn] for creating such
-a useful tool.
+I thank Claire Huang, [Zixian Cai], and Prof. [Steve Blackburn] for creating
+such a useful tool.
 
 [Zixian Cai]: https://www.zcai.org/
 [Steve Blackburn]: https://users.cecs.anu.edu.au/~steveb/
 
-The code has been [merged][commit-tracing] into the master branch of [mmtk-core].
-Related tools and documentation can be found in [this directory][tracing-tools].
+The tool is now publicly available.  The code has been [merged][commit-tracing]
+into the master branch of [mmtk-core].  Related tools and documentation can be
+found in [this directory][tracing-tools].
 
 [commit-tracing]: https://github.com/mmtk/mmtk-core/commit/b6ffcddeef2407ed910dc1ef98e0d038cc4a1eb6
 [mmtk-core]: https://github.com/mmtk/mmtk-core
