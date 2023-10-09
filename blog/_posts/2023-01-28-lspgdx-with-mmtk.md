@@ -131,6 +131,6 @@ gameplay.  If you are interested, you can clone my repositories on GitLab.
 -   BuildGDX: <https://gitlab.com/wks/BuildGDX>
 -   LSPGDX: <https://gitlab.com/wks/LSPGDX>
 
-<!--
+{% comment %}
 vim: tw=80
--->
+{% endcomment %}

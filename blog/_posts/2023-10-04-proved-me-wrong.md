@@ -311,6 +311,6 @@ the MPLR 2023 conference][HBC23-conf-link]
 
 [HBC23-conf-link]: https://2023.splashcon.org/details/mplr-2023-papers/11/Improving-Garbage-Collection-Observability-with-Performance-Tracing
 
-<!--
+{% comment %}
 vim: tw=80
--->
+{% endcomment %}

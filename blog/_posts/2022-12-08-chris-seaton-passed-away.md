@@ -29,6 +29,6 @@ well as the whole programming language and virtual machine community.
 [mmtk-ruby]: https://github.com/mmtk/mmtk-ruby
 [Ruby]: https://www.ruby-lang.org/
 
-<!--
+{% comment %}
 vim: tw=80
--->
+{% endcomment %}

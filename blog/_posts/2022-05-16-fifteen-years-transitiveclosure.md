@@ -1284,6 +1284,6 @@ can implement this trait and process the "enqueued" object immediatey.
 
 The tracking issue: https://github.com/mmtk/mmtk-core/issues/559
 
-<!--
+{% comment %}
 vim: tw=80
--->
+{% endcomment %}

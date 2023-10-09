@@ -1173,6 +1173,6 @@ remarkable performance with [RC-Immix and conservative stack scanning][SBM14].
 
 Anyway, CRuby still has hope.  Let's keep working on it.
 
-<!--
+{% comment %}
 vim: tw=80
--->
+{% endcomment %}

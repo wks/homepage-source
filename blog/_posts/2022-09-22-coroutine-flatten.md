@@ -1097,6 +1097,6 @@ operations, etc.), and programmers do not need to annotate any expression with
 [gevent]: http://www.gevent.org/index.html
 
 
-<!--
+{% comment %}
 vim: tw=80
--->
+{% endcomment %}

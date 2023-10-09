@@ -56,6 +56,6 @@ developers now have the option to build their next language on a micro virtual
 machine.  We believe that the quality of programming languages will be improved
 as a result.
 
-{% if false %}
-vim: tw=72 spell
-{% endif %}
+{% comment %}
+vim: tw=80 spell
+{% endcomment %}
