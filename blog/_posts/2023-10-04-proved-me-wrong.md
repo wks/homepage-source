@@ -293,11 +293,11 @@ and I should focus on those objects because they were the bottleneck.
 
 ## The tool
 
-I thank Claire Huang, [Zixian Cai], and Prof. [Steve Blackburn] for creating
-such a useful tool.
+I thank Claire Huang, [Zixian Cai], and [Prof. Steve Blackburn][steveb] for
+creating such a useful tool.
 
 [Zixian Cai]: https://www.zcai.org/
-[Steve Blackburn]: https://users.cecs.anu.edu.au/~steveb/
+[steveb]: https://users.cecs.anu.edu.au/~steveb/
 
 The tool is now publicly available.  The code has been [merged][commit-tracing]
 into the master branch of [mmtk-core].  Related tools and documentation can be
@@ -307,9 +307,11 @@ found in [this directory][tracing-tools].
 [mmtk-core]: https://github.com/mmtk/mmtk-core
 [tracing-tools]: https://github.com/mmtk/mmtk-core/tree/master/tools/tracing
 
-The paper that describes this work has been accepted and will be published [in
-the MPLR 2023 conference][HBC23-conf-link]
+The paper that describes this work is [freely available online][HBC23-paper]
+under the Creative Commons Attribution 4.0 International License, and will be
+presented [in the MPLR 2023 conference][HBC23-conf-link].
 
+[HBC23-paper]: https://users.cecs.anu.edu.au/~steveb/pubs/papers/ebpf-mplr-2023.pdf
 [HBC23-conf-link]: https://2023.splashcon.org/details/mplr-2023-papers/11/Improving-Garbage-Collection-Observability-with-Performance-Tracing
 
 {% comment %}
