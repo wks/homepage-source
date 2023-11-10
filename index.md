@@ -3,6 +3,10 @@ layout: default
 title: Home
 ---
 
+<small> Psssssst! I have an unofficial [BitTorrent file][dacapo-torrent] for The
+DaCapo Benchmark Suite 23.11-chopin.  Try it if the official download link is
+too slow for you.</small>
+
 {% include recent_blog_posts.html %}
 
 ## About Me
@@ -36,6 +40,7 @@ I recently created [TUIModPlayer], a Rust program that plays [Module (a.k.a.
 [openark-naiverc]: https://gitee.com/openarkcompiler/OpenArkCompiler/blob/master/src/mrt/compiler-rt/include/collector/collector_naiverc.h
 [TUIModPlayer]: https://github.com/wks/tuimodplayer
 [mod]: https://modarchive.org/index.php?article-modules
+[dacapo-torrent]: {% link downloads.md %}
 
 ## Publications
 
