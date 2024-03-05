@@ -450,14 +450,76 @@ were doing, and will bankrupt quickly.  That meant if anyone or any company was
 doing honest research and development work, they will already be better than 90%
 of their peers in China.  
 
-Wait.  That sounds horribly familiar.  I mentioned the open source project so
-similar to Micronaut.  I also remembered a recent news about CEC-IDE, an IDE
-claimed to be fully original and fully made-in-China, but ended up being
-[VSCode] with very minor modification (and was not open-source).
+Wait!  That sounded horribly familiar!  I told my friend about the open source
+project so similar to Micronaut.  I also mentioned a recent news about CEC-IDE
+([see this][cec-ide-news]).  CEC-IDE claimed to be an IDE fully original and
+fully made-in-China.  But it ended up that they took the source code of [Visual
+Studio Code][vscode], changed its name, added a login window for paid 'VIP'
+services, added some plug-ins, and labelled it as a home-brewed software (and it
+was close-sourced), an 'independently software developed by a state-owned
+corporation, with trustworthy quality'.  Ironically, CEC-IDE was on the CCTV
+(China Central Television) News when it was released, not long before it became
+the laughing stock of all Chinese netizens.
 
-[VSCode]: https://code.visualstudio.com/
+[cec-ide-news]: https://www.pixelstech.net/article/1693110126-Chinese-Developers-Release-CEC-IDE-Claimed-as-First-Independently-Developed-IDE
+[vscode]: https://code.visualstudio.com/
 
+And everything suddenly became clear.  Here is the whole story:
 
+1.  Since the trade war started, both the government and companies worried about
+    their software supply chains.
+2.  They started pouring money into the field of domestic software and
+    open-source software, thinking they could be the rescue.
+3.  Then some developers saw this as an opportunity.  Since the consumers wanted
+    domestic and open-source software, they make domestic and open-source
+    software for them.
+4.  But it is difficult to develop software from scratch.  Instead, they simply
+    copied existing open-source projects and label them as domestically
+    developed.
+
+Some copycats simply took the source code and changed the name.  Other more
+sophisticated copycats wrote code from scratch, using existing open-source
+projects as frames of reference.  Of course they didn't care about the user, the
+documentation or the code quality.  As long as it was made-in-China and
+open-source, investors would throw money into it, and average people would hail
+it as the future star of China when they saw it on the news.
+
+And this is why when you open any project on the OSPP'2023 home page, chance is
+high that the project will be labelled as 'domestically developed, with
+self-owned intellectual property'.  
+
+But at what cost?
+
+A 'software supply chain' built this way will be brittle, if working at all.
+High-level applications will be built on flawed low-level libraries which don't
+even handle exceptions properly and may break at any time.  But will the
+developers care?  Probably not.  They would worry about their house rent and
+mortgage much more than software quality.  Their bosses wouldn't worry about
+software quality, either, if their companies monopolise a field, for example,
+food ordering.  When the end users have to choose between one faulty software
+and another, all they can do is pressing the reload button and pray it would
+work the next time.
+
+And will we win the trade war this way?  Well, I won't call it a win if average
+people are oppressed by faulty software instead of foreign countries.
+
+# Summary
+
+OSPP'2023 was awesome.
+
+Students were smart and passionate.
+
+The organisers tried hard keeping the event running, but there were much room
+for improvement.
+
+The communities?  Most of them were honestly doing free software developments,
+while some people are completely jerks.
+
+So should I tell people the Australian National University is awesome, and our
+research group is doing interesting researches?  Yes, to the students.  Some
+students already expressed their interests in studying in the ANU when I told
+them about it.  As of those who can't even read simple interviews in English,
+'They were not our target audience', said one of my colleagues.
 
 {% comment %}
 vim: tw=80
