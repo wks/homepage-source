@@ -193,10 +193,12 @@ WeChat group.  Despite its popularity in China, WeChat is a proprietary instant
 messaging application mainly focusing on smart phone, and is terrible to use on
 desktop computers.  I felt very strange because OSPP stood for 'Open Source
 Promotion Plan'.  It was supposed to promote free open-source software.  Why do
-they invite me to use a proprietary application?  But I joined the WeChat group
-anyway to see what would follow.  That was a group with 'community
-collaboration' in its title, and its members included 400+ representatives from
-different communities.
+they invite me to use a proprietary application?
+
+But I joined the WeChat group anyway to see what would follow.  That was a group
+with 'community collaboration' in its title, and its members included 400+
+representatives from different communities.  People were asking questions and
+pointing out issues about the event, while the organisers replied.
 
 After a few days, the organiser published a template pack for communities to
 make their promotional 'posters', and here is a sample:
@@ -204,11 +206,11 @@ make their promotional 'posters', and here is a sample:
 ![Poster template]({% link /assets/img/ospp2023-poster.jpg %})
 
 For those who don't know, those who use WeChat or other Chinese social media
-such as Weibo for promotion usually make such one-picture posters and send them
-in group-chat channels.  The advantage is obvious.  It is just so simple, and it
-bypasses any text-formatting functionalities WeChat or other apps provided to
-their users, which are often hard to use (if exist at all).  The QR codes are
-usually URLs to social media accounts.
+such as Weibo for promotion usually make such one-picture posters and publish
+them as tweets, or send them to group-chat channels.  The advantage is obvious.
+It is just so simple, and it bypasses any text-formatting functionalities WeChat
+or other instant message / social media apps provides to their users, which
+are often hard to use (if exist at all).
 
 The problem is, the organiser provided the template pack using a link to [Baidu
 Wangpan], a Chinese cloud storage service that requires a proprietary client to
@@ -276,9 +278,184 @@ eventually got a new default wallpaper for Plasma 6, as shown below:
 
 It was sad because it had been three previous OSPP events and the organisers
 were still yet to understand the nature of the free software community.
+Organising a free software event this way sent a very bad message to the public
+that they didn't really care about software freedom.  Ironically, [OpenEuler], a
+domestic Linux distribution, was a co-organiser of OSPP'2023.  Using free image
+formats would have helped OpenEuler demonstrate that their operating system was
+suitable for everyday use, but they didn't.  I couldn't help visualising an
+OpenEuler user going nuts when they couldn't use their own operating system to
+open an image file from their own event.
+
+[OpenEuler]: https://www.openeuler.org/
+
+In the end, we didn't use their poster templates because a Markdown-formatted
+post in our Zulip channel was just enough for that purpose, and we didn't have a
+social media account.  I'd rather spend one afternoon fixing more bugs than
+trying to edit PDF or JPEG files directly, which would result in bad-looking
+images anyway.  I raised an [issue][ospp2023-issue], asking the organisers to
+provide materials in free formats.  However, at the time of writing, nobody had
+replied to that issue.
+
+[ospp2023-issue]: https://github.com/summer-ospp/publicity/issues/1
 
 # The ugly
 
+Although the organisers of OSPP'2023 didn't do a perfect job organising the
+event, they promised to do it better next time when I criticised them in the
+WeChat channel.  I think there is still hope.  Given enough time, OSPP will
+eventually be organised in the right way.
+
+However, there was still one thing that could be worse --- the communities.  Not
+all communities, of course.  Only a few of them.
+
+An interesting fact was, although students were required to be enrolled in
+universities, there was no such requirement for communities (any communities
+using OSI-approved open-source licenses would qualify).  No offend to the people
+who didn't go to university and still made excellent free software, but that
+rule meant that you had to expect participating communities of any quality, and
+their members to be any kind of people you may possibly meet in the street.
+
+When I was invited into the WeChat group of 400+ community representatives, I
+found some members were greeting each other and offering to give stars to each
+other's GitHub repositories.  One of them 'kindly' asked if he could give a star
+to MMTk's GitHub repository.  I didn't thank him, but I replied that he needed a
+five-star rating system for GitHub so that he could give one star to every repo
+he barely knew, and five stars to the repos he honestly loved.  I consider it
+cheating to blindly give stars to repositories of one's 'friends' because that
+would make stars meaningless.  A repo with lots of stars may mean many people
+genuinely like it, and it may also mean the author has many 'friends'.  I still
+prefer that stars mean the former.
+
+While community representatives were discussing about the event in the WeChat
+group, several communities spammed the channel with news about every single
+point release of their software.  Those posts became dominant since July when
+the programming phase started and very few questions were asked about
+administrivia.  Posts from each of the spammers look horribly similar, as if
+they were sent by bots.  That was annoying.  I thought this WeChat channel was
+for communicating with OSPP organisers.
+
+Well, since they dared spamming, I dared challenging them.
+
+I looked at one project.  It advertised as a web framework, with [Spring]-like
+IoC container and annotation-based URL routing, but also supported GraalVM and
+claimed to be many times faster than Spring.  Web, IoC and Graal.  Didn't that
+sound familiar?  Yes.  [Micronaut].  That is a Web framework, with Spring-like
+IoC container, annotation-based URL routing, and GraalVM support, too.  I heard
+about Micronaut about four or five years ago, but this project seemed to be
+recently started, and poorly documented.  I asked its representative how his
+project was different from Micronaut.  'The author has never heard of
+Micronaut', he answered, embarrassed, 'If I have to find any difference, it's
+that our project was made in China.' Their official web site compared their
+framework against Spring all the time and claimed to be much faster, but never
+mentioned Micronaut at all.  That was not good.  You simply can't claim your
+project is fast without comparing against the main contenders.
+
+[Spring]: https://spring.io/
+[Micronaut]: https://micronaut.io/
+
+Then another project spammed, and I looked at that, too.  It was a simple socket
+abstraction layer written in Java, similar to [Netty], but poorly documented,
+and claimed to be twice as fast as Netty.  I looked at the code for a moment and
+found something like this:
+
+[Netty]: https://netty.io/
+
+```java
+} catch (Exception e) {
+    e.printStackTrace();
+}
+```
+
+And in another function, we could find something like this:
+
+```java
+try {
+    accept(...);
+} catch (Throwable e) {
+    setState(...);
+    accept(...); // Errors not handled
+} finally {
+    makeSession(...);
+}
+```
+
+That didn't look very professional, did it?  Anyone who has learned Java for a
+few months knows that `e.printStackTrace()` is not the right way to handle
+errors, and retrying a failed operation doesn't guarantee that it will be
+successful.  Omitting all the error-handling code and running micro benchmarks
+that always succeed will always give you good numbers, but that's meaningless.
+I told its representative that they shouldn't claim they were faster than Netty
+while they were not doing exception handling properly, just like we can't claim
+a GC algorithm was faster while the write barrier was deliberately turned off.
+Otherwise people would challenge the result.  'Our project has been challenged
+all along', replied the project representative, 'and I have long been used to
+it.  Only those who used our projects know how pleasant it is.'  Yuck!  What an
+irresponsible developer!
+
+But, strangely, other people in the WeChat group started to speak for him.  One
+person said, 'Some people want security while others want convenience.  Everyone
+will get what they love.' Another person said, 'As a pawn \[of a company\], I
+can't care less about how users feel.  Only the CTO needs to care about users,
+and we programmers only need to please ourselves.'  Seriously?  I asked whether
+they care about downstream projects at all, and apparently they didn't.  Knowing
+this, I stopped arguing because that would be futile.
+
+After I complained about OSPP'2023 not providing poster templates in free
+formats, the organisers said they will be more considerate the next time.
+However, other users in the WeChat group started whining.  Some said in some
+fields, free software were far worse than their proprietary counterparts,
+therefore we (OSPP) may use proprietary software.  Some said it was good to
+practice the spirits of free software in this event, but we don't need to force
+it.  Others said 'OSPP gives you money and you should shut up and do what you
+are asked to'.  But let's look at the poster sample again.
+
+![Poster template]({% link /assets/img/ospp2023-poster.jpg %})
+
+Does it look good?  It does.  Well, it is good enough as a poster for an event
+like OSPP, but not *that* good.  It is not so good that it has to be drawn using
+best-of-the-breed tools like Adobe Photoshop.  Can someone create a poster of
+similar quality (or even better) using only free software?  Given the result of
+the [wallpaper contest][wallpaper-contest], the answer is obviously yes.  So
+this is not a question of why using free software.  It's why not.  OSPP was a
+very good opportunity to put software freedom into practice, and it was not hard
+to do.  Why do we even have to 'force' using free software?
+
+And when I shared the [interviews with Krita artists][krita-interviews], someone
+said he could not understand those interviews because he doesn't speak English
+well.  Seriously?  Chinese schools start teaching English since the third year
+in school.  By the time when students finish high school, they will have been
+learning English for ten years.  How could anyone learn English for such a long
+time and still can't understand simple interviews like those?
+
+And someone mentioned me in the group chat, telling me he bought a Mac, a very
+expensive model, for opening proprietary formats.  I started to understand that
+someone already started to hate me since I complained about all those
+proprietary formats and irresponsible developers.  I told him that he could have
+donated the money to support three students.  He apparently broke down mentally,
+and started telling a pathetic story about himself, including quitting high
+school, joining a open-source organisation, making 5000+ commits per year (that
+is about 20 commits per working day, or about 20 minutes per commit) which most
+people don't believe.  Strangely, several other people started to sympathise
+with him.  One said he didn't have a high degree and had a hard time finding a
+job.  Another said he only got 28 points (out of 150) in an English exam, and he
+could have gone to Peking University if he got 100 points or more.  Come on.
+Failing an exam is not something to be proud of.  
+
+How weird!  I couldn't imagine what kind of people are there in the community.
+
+Later that year, a friend of mine visited me in Beijing after living overseas
+for many years.  He told me that many companies in China were simply copying the
+business model of companies overseas, but most of them had no idea what they
+were doing, and will bankrupt quickly.  That meant if anyone or any company was
+doing honest research and development work, they will already be better than 90%
+of their peers in China.  
+
+Wait.  That sounds horribly familiar.  I mentioned the open source project so
+similar to Micronaut.  I also remembered a recent news about CEC-IDE, an IDE
+claimed to be fully original and fully made-in-China, but ended up being
+[VSCode] with very minor modification (and was not open-source).
+
+[VSCode]: https://code.visualstudio.com/
 
 
 
