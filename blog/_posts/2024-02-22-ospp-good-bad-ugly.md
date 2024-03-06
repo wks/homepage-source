@@ -37,11 +37,11 @@ short) comes into play.  What will you fear for if you have the complete source
 code (and probably the entire revision history) in your hard drive (not in the
 'cloud'), and the contributors have given you a perpetual, worldwide,
 non-exclusive, no-charge, royalty-free, irrevocable license to run, copy,
-distribute, study, change and improve the software?  Free Software (and free
+distribute, study, change and improve the software?  Free software (and free
 hardware, too) is the ultimate answer to protectionism.  Since the trade war
 started, Chinese companies and the government started to embrace free software
 more than ever.  Some government agencies even switched to domestic GNU/Linux
-distributions as their working environment for average workers.
+distributions as their primary working environments for average workers.
 
 Here is a photo taken from the computer science section in a Xinhua Book Store
 in Beijing.  The book store is currently under refurbishment, so only a small
@@ -59,12 +59,12 @@ The [Open Source Promotion Plan (OSPP)][OSPP] is an event organised by the
 [Institute of Software, China Academy of Science (ISCAS)][ISCAS].  According to
 OSPP's official website, it is an explicit goal of OSPP to 'build the open
 source software supply chain together'.  Similar to Google Summer of Code
-(GSoC), OSPP funds students (not limited to Chinese) to participate in free
-software projects for three months (from July to September) in Summer.
+(GSoC), OSPP funds students (not limited to Chinese nationals) to participate in
+free software projects for three months (from July to September) in Summer.
 
--   For students, such activities give them motivations to participate, for the
-    love of FOSS or just some extra cash.
--   For FOSS projects, such activities give them an opportunity to attract
+-   For students, such events give them motivations to make contribution, for
+    the love of FOSS or just some extra cash.
+-   For FOSS projects, such events give them an opportunity to attract
     contributors, and also get some low-priority tasks done while main
     contributors are busy with high-priority issues.
 -   For the organiser, ISCAS, and the Chinese government backing it, this event
@@ -90,12 +90,12 @@ their contributions.  However, the experience of participating in OSPP is not
 
 I have always been a FOSS enthusiast.  In late 2000s and early 2010s, I attended
 many off-line activities related to FOSS in Beijing (because I studied in
-Beijing).  That included some student societies in my university, the [Software
-Freedom Day][SFD], activities from local user groups such as the [Beijing Linux
-User Group][BLUG], the [Beijing GNOME User Group][BJGUG], etc.  Then I went to
-Australia for my PhD, where I enjoyed exciting talks and pizzas with the
-[Canberra Linux User Group][CLUG].  After I returned to China, I didn't find
-much chance to get together with local communities due to work pressure and
+Beijing).  That included several student societies in my university, the
+[Software Freedom Day][SFD], activities from local user groups such as the
+[Beijing Linux User Group][BLUG], the [Beijing GNOME User Group][BJGUG], etc.
+Then I went to Australia for my PhD, where I enjoyed exciting talks and pizzas
+with the [Canberra Linux User Group][CLUG].  After I returned to China, I didn't
+find much chance to get together with local communities due to work pressure and
 COVID19.  I missed the days when FOSS lovers (including both Chinese and
 foreigners working in Beijing) get together once a month, bringing laptops, and
 coding for fun.
@@ -108,10 +108,10 @@ coding for fun.
 I heard about OSPP in late 2022, and thought MMTk should participate in the next
 year in order to let more people know about MMTk, and probably let more people
 know how awesome the [Australian National University (ANU)][ANU] is, too.  I
-couldn't wait telling FOSS lovers that we are doing interesting researches and
-working on an open-source projects with collaborators from many different
-countries.  And we did.  We applied for participation in OSPP'2023, and we were
-accepted.
+couldn't wait telling FOSS lovers that we are doing interesting researches on
+memory management and working on open-source projects with collaborators from
+many different countries.  And we did.  We applied for participation in
+OSPP'2023, and we were accepted.
 
 [ANU]: https://www.anu.edu.au/
 
@@ -125,22 +125,22 @@ software in general.  The organiser also told me that although free software was
 already very popular among top-tier universities in Beijing, it was far from
 true in lower-tier universities in smaller cities.   I appreciated their
 efforts.  It takes time and energy to get people aware of free software, and it
-is harder to let them understand the spirit of software freedom, but it is worth
+is harder for them to understand the spirit of software freedom, but it is worth
 trying.
-
-OSPP organisers invited participating communities to submit introduction videos
-so that they can help promoting their projects by publishing the videos on
-behalf of the communities.  Professor Steve Blackburn, the leader of the MMTk
-project, gladly made a video to provide [a brief introduction to
-MMTk][mmtk-video].  He even recorded it several times to correct minor mistakes.
-I created Chinese subtitle for it and sent it to the OSPP organisers.
-
-[mmtk-video]: https://youtu.be/0mldpiYW1X4
 
 During the whole OSPP'2023 event, the organisers helped us with the process of
 registration as well as overcoming errors of their poorly engineered website
 (I'll elaborate in the next section).  They tried their best keeping the event
 running.
+
+The organisers also invited participating communities to submit introduction
+videos so that they can help promoting their projects by publishing the videos
+on behalf of the communities.  Professor Steve Blackburn, the leader of the MMTk
+project, gladly made a video to provide [a brief introduction to
+MMTk][mmtk-video].  He even recorded it several times to correct minor mistakes.
+I created Chinese subtitle for it and sent it to the OSPP organisers.
+
+[mmtk-video]: https://youtu.be/0mldpiYW1X4
 
 ## The students
 
@@ -173,14 +173,15 @@ than usual, but he fought through all those difficulties.
 
 [VMMagic]: https://www.steveblackburn.org/pubs/papers/vmmagic-vee-2009.pdf
 
-From then on, we had online meeting every week.  I basically point him to
-interesting places in the code base, outlining what should be done.
+From then on, we had an online meeting every week.  I basically point him to
+interesting places in the code base, outlining what should be done, and
+answering his questions.
 
 Things went on mostly well, until Haohang got stuck trying to call a Rust
-closure from JikesRVM.  I thought that was easy.  The crux was specialising a
-top-level function with type argument, and passing the pointer to the closure
-object between Rust and native code.  We have similar code in our VM binding
-repos including the JikesRVM binding, because it is a common task for
+closure from JikesRVM.  I thought that was easy (but I was wrong).  The crux was
+specialising a top-level function with type argument, and passing the pointer to
+the closure object between Rust and native code.  We have similar code in our VM
+binding repos including the JikesRVM binding, because it is a common task for
 interfacing with native code.  If this happens to my colleagues in the core
 team, I will just write part of the code for them should they encounter
 something difficult to implement.  However, I didn't do that for Haohang.  One
@@ -191,6 +192,11 @@ reason was that I didn't want to spoil all the fun of finding the solution by
 oneself.  He eventually figured it out by himself after several weeks.  That was
 a bit long, but he managed to finish the rest of the work before the deadline
 and his code was eventually merged.
+
+In hindsight, I felt I might have been too harsh for Haohang.  After he finished
+his project, a colleague in the MMTk team asked me a similar question about
+another binding.  Then I realised it may not be so obvious for first-time
+contributors like Haohang.
 
 Meanwhile, good news came from the other student working on the ARMv8 port.  The
 student was able to run DaCapo Benchmarks on an ARMv8 device with MMTk and
@@ -209,16 +215,16 @@ from satisfactory.
 
 The [official website][OSPP] was poorly engineered.  It forced each user to have
 exactly one role.  But since I am both a community representative and a student
-project mentor,  I had to log in with one email address as the community
-representative, and another email address as the mentor.
+project mentor,  I had to log in with two different email addresses for two
+different roles.
 
 Although OSPP'2023 allowed communities to use Chinese or English or both, the
 website didn't seem to be considerate enough for English users.  The
-registration forms limit the length of some sections by the number of
-characters, making them unfair for English which tend to have more characters
-than Chinese.  The typesetting was also weird.  When breaking long lines, words
-can be broken anywhere, disregarding any hyphenation rules of the English
-language.  Look at the following screenshot:
+registration forms limit the length of some fields (such as the project
+description) by the number of characters, making them unfair for English which
+tend to have much more characters than Chinese.  The typesetting was also weird.
+When breaking long lines, words can be broken anywhere, disregarding any
+hyphenation rules of the English language.  Look at the following screenshot:
 
 ![Screenshot with weird line wrapping]({% link /assets/img/ospp2023-linewrap.jpg %})
 
@@ -258,7 +264,7 @@ pointing out issues about the event, while the organisers replied.
 ## They use proprietary storage service and proprietary image formats
 
 After a few days, the organiser published a template pack for communities to
-make their promotional 'posters', and here is a sample:
+make their promotional 'posters'.  Here is a sample:
 
 ![Poster template]({% link /assets/img/ospp2023-poster.jpg %})
 
@@ -294,12 +300,12 @@ Are you kidding me?  Providing open-source promotion material in two proprietary
 formats?
 
 I complained to the organisers that there was absolutely no way for Linux users
-to open the `.sketch` file, and I don't want to register for a free account to
-use Figma with limited functionality, and I won't buy a Mac just for OSPP.  Even
+to open the `.sketch` file, and I don't want to register a free account to use
+Figma with limited functionality, and I won't buy a Mac just for OSPP.  Even
 `.psd` could be slightly better because GIMP and Krita could open a subset of
 `.psd` files.  An organiser replied in an embarrassed tone, saying that the
-artist who designed that poster was just asking them whether they should publish
-the `.psd` file, too.
+artist who designed that poster was just asking them whether they should give
+the organisers the `.psd` file, too.
 
 From the conversation, it was obvious that the OSPP organisers hired an artist
 to make a poster template for OSPP.  The artist was probably an average artist
@@ -315,24 +321,24 @@ exported the templates in Mac-friendly formats.
 community, but an average event whose theme happened to be about free
 software.**
 
-When organising an event for the free software community, the organisers need to
-understand what software FOSS contributors use.  There are many free and
-open-source communication platforms, such as [Zulip] which MMTk is using, as
-well as the good old IRC and mailing lists.  There are storage services
-accessible using only free software, such as their official website.  And there
-is free graphics software, such as [GIMP] and [Krita] for bitmaps, and
-[Inkscape] for vector graphics.
+Using free software is such a basic thing for organising an event for the free
+software community.  There are many free and open-source communication
+platforms, such as [Zulip] which MMTk is using, as well as the good old IRC and
+mailing lists.  There are storage services accessible using only free software,
+such as their official website.  And there is free graphics software, such as
+[GIMP] and [Krita] for bitmaps, and [Inkscape] for vector graphics.
 
 And there are artists who are also free software lovers.  The Krita community
-hosted [interviews][krita-interviews] with Krita as their main creative tool.
-If you need help from artists who love free software, you can just ask, because
-**the free software community is all about creation and sharing**.  The KDE
-community held a [Plasma 6 Wallpaper Context][wallpaper-contest], with
-requirements including 'releasing under the CC-BY-SA-4.0 license' and 'creating
-the wallpaper in a non-proprietary format'.  Many artists [submitted their
-work][wallpaper-submission], and the KDE community eventually got a new default
-wallpaper for KDE 6, as shown below (taken from their [official announcement of
-the KDE 6 MegaRelease][megarelease6]).
+hosted [interviews][krita-interviews] with artists who use Krita as their main
+creative tool.  If you need help from artists who love free software, you can
+just ask, because **the free software community is all about creation and
+sharing**.  The KDE community held a [Plasma 6 Wallpaper
+Context][wallpaper-contest], with requirements including 'releasing under the
+CC-BY-SA-4.0 license' and 'creating the wallpaper in a non-proprietary format'.
+Many artists [submitted their work][wallpaper-submission], and the KDE community
+eventually got a good-looking new default wallpaper for KDE 6, as shown below
+(taken from their [official announcement of the KDE 6
+MegaRelease][megarelease6]).
 
 ![Plasma 6 Screenshot]({% link /assets/img/plasma6-desktop.png %})
 
@@ -345,11 +351,11 @@ the KDE 6 MegaRelease][megarelease6]).
 [wallpaper-submission]: https://discuss.kde.org/c/community/wallpaper-competition/26
 [megarelease6]: https://kde.org/announcements/megarelease/6/
 
-It was sad because it was so easy to be friendly to free software.  Just export
-the image to the SVG format and all Linux users could edit the image using
-Inkscape.  It should take a sophisticated artist less than ten minutes to do
-this, and a Linux user to test if it works by opening the SVG image with
-Inkscape.  *But they did not do it!*
+It was sad because it was so easy to do it right.  Just export the image to the
+SVG format and all Linux users could edit the image using Inkscape.  It should
+take a sophisticated artist less than ten minutes to do this, and a Linux user
+to test if it works by opening the SVG image with Inkscape.  *But they did not
+do it!*
 
 It was also sad because it had been three previous OSPP events and the
 organisers were still yet to understand the nature of the free software
@@ -368,7 +374,7 @@ operating system to open an image file from their own event.
 
 In the end, we didn't use their poster templates because a Markdown-formatted
 post in our Zulip channel was just enough for promotional purpose, and we didn't
-have a social media account.  I'd rather spend one afternoon fixing more bugs
+have a social media account.  I'd rather spend one afternoon fixing some bugs
 than trying to edit PDF or JPEG files directly, which would result in
 bad-looking images anyway.  I raised an [issue][ospp2023-issue], asking the
 organisers to provide materials in free formats.  However, at the time of
@@ -394,13 +400,14 @@ as [Brian Fox] who dropped out of high school and made the famous [Bash] shell.
 But that rule meant that you had to expect participating communities of any
 quality, from bleeding edge research projects from the China Academy of Science
 to hello-world projects made by first-time programmers, and their members to be
-any kind of people you may possibly meet in streets or psychiatric hospitals
-(again no offence to people actually suffering mental disorders).
+any kind of people you may possibly meet in streets or psychiatric hospitals (I
+will elaborate, but no offence to the patients who are actually suffering from
+mental disorders).
 
 [Brian Fox]: https://en.wikipedia.org/wiki/Brian_Fox_(computer_programmer)
 [Bash]: https://www.gnu.org/software/bash/
 
-## They give stars to each other's repos
+## They gave stars to each other's repos
 
 When I was invited into the WeChat group of 400+ community representatives, I
 found some members were greeting each other and offering to give stars to each
@@ -421,8 +428,7 @@ While organisers and community representatives were using the WeChat group as a
 Q/A channel, several communities spammed the channel with news about every
 single point release of their software.  Those posts became dominant since July
 when the programming phase started and very few questions were asked about
-administrivia.  That was annoying.  I thought this WeChat channel was
-for communicating with OSPP organisers.
+administrivia.  That was annoying.
 
 Well, since they dared spamming, I dared challenging them.
 
@@ -465,7 +471,7 @@ found something like this:
 }
 ```
 
-And in another function, we could find something like this:
+And in another function:
 
 ```java
 try {
@@ -491,24 +497,24 @@ claim a GC algorithm to be faster while the write barrier was deliberately
 turned off.  Otherwise people would challenge the result.
 
 'Our project has been challenged all along', replied the project representative,
-'and I have long been used to it.  Only those who used our projects know how
+'and I have long been used to it.  Only those who used our project know how
 pleasant it is.'
 
 Yuck!  What an irresponsible developer!
 
-#### And people were speaking for him!
+#### But people were speaking for him!
 
-But strangely, some other people in the WeChat group started to speak for him.
+Strangely, some other people in the WeChat group started to speak for him.
 
 -   One person said, 'Some people want security while others want convenience.
     Everyone will get what they love.'
--   Another person said, 'As a low-rank employee, I can't care less about how
+-   Another person said, 'As a low-level employee, I can't care less about how
     users feel.  Only the CTO needs to care about users, and we programmers only
     need to please ourselves.'
 
-Seriously?  I asked whether they care about downstream projects built upon
-theirs, and apparently they didn't.  Knowing this, I stopped arguing because
-that would be futile.
+Seriously?  I couldn't believe what I saw.  I asked whether they care about
+downstream projects built upon theirs, and apparently they didn't.  Knowing
+this, I stopped arguing because that would be futile.
 
 ## They hated free software and didn't want to promote it
 
@@ -528,32 +534,34 @@ But let's look at the poster sample again.
 ![Poster template]({% link /assets/img/ospp2023-poster.jpg %})
 
 Does it look good?  Yes.  It does.  Well, it is good enough as a poster for an
-event like OSPP, but not *that* good.  It is not the case that it is so good
-that it has to be drawn using best-of-the-breed tools like Adobe Photoshop.  Can
-someone create a poster of similar quality (or even better) using only free
-software?  Given the result of the [wallpaper contest][wallpaper-contest], the
-answer is obviously yes.  So the right question is not whether we should force
-using free software, but *why not*.  OSPP stands open-source promotion plan, and
-the use of free software should be the default, the common sense, rather than
-something that needs to be 'forced'.
+event like OSPP, but not *that* good.  I still don't quite like blue on blue, or
+white on light blue.  It is not the case that it is so good, with all sorts of
+fancy effects, that it has to be drawn using best-of-breed tools like Adobe
+Photoshop.  Could anyone create a poster of similar quality (or even better)
+using only free software?  Given the result of the [wallpaper
+contest][wallpaper-contest], the answer is obviously yes.  So the right question
+is not whether we should force using free software, but *why not*.  OSPP stands
+open-source promotion plan, and the use of free software should be the default,
+the common sense, rather than something that needs to be 'forced'.
 
 ## They learned English for nine years and still couldn't read simple English articles.
 
 And when I shared the [interviews with Krita artists][krita-interviews], someone
-said he could not understand those interviews because he didn't speak English
+said he couldn't understand those interviews because he didn't speak English
 well.
 
 Seriously?  I started learning English since the fourth year in primary school,
 and nowadays Chinese schools start teaching English as a compulsory course since
 the third year.  By the time when students finish high school, they will have
-been learning English for at least nine years if they were not older than me.
-How could anyone learn English for such a long time and still can't understand
-simple articles like those?
+been learning English for at least nine years (unless they were older than me
+and received worse education in their childhood).  How could anyone learn
+English for such a long time and still can't understand simple articles like
+those?
 
 ## And they hated me.
 
 And someone mentioned me in the group chat, telling me he bought a Mac, a very
-expensive model, for opening proprietary image formats.  I started to understand
+expensive model, for opening proprietary image formats.  I started to realise
 that someone already started to hate me since I complained about all those
 proprietary formats and irresponsible developers.
 
@@ -564,12 +572,12 @@ organisation, and making 5000+ commits per year which most people don't believe.
 Well, I believed what this poor guy said because he supplied a screenshot.  But
 I felt sorry for his organisation because 5000+ commits per year means on
 average less than 20 minutes for each commit.  You can achieve 5000+ commits per
-year, too, if you make 5000+ trivial changes that can be done in 20 minutes, and
-do no code reviewing and no CI tests.  You can't do the same for the MMTk
-project because all pull requests need to be peer-reviewed and go through
-comprehensive CI tests which take about an hour, while performance-sensitive
-changes need to undergo performance evaluation on specially tuned testing
-machine which takes hours if not days.
+year, too, if you make 5000+ trivial changes that take less than 20 minutes to
+do, and the organisation enforces no code reviewing and no CI tests.  You can't
+do the same for the MMTk project because all pull requests need to be
+peer-reviewed and go through comprehensive CI tests which take about an hour,
+while performance-sensitive changes need to undergo performance evaluation on
+specially tuned testing machine which takes hours if not days.
 
 Strangely, several other people started to sympathise with him.
 
@@ -614,22 +622,33 @@ into the project.
 
 ## The whole story
 
-Everything suddenly became clear.  Here is the whole story:
+Everything suddenly became clear.  Here is the whole story, in four parts:
 
 1.  Since the trade war started, both Chinese companies and the Chinese
     government worried about their software supply chains.
 2.  They started pouring money into the field of domestic software and
     open-source software, thinking they could be the rescue.
-3.  Then some developers (not necessarily free software lovers) saw this as an
-    opportunity.  Since the consumers wanted domestic and open-source software,
-    they just make domestic and open-source software for them.
-4.  But it is difficult to start from scratch.  Instead, they simply copied
-    existing open-source projects and label them as domestically developed.
+3.  Then some developers saw this as an opportunity.  Since the consumers wanted
+    domestic and open-source software, they just make domestic and open-source
+    software for them.
+
+Note that those developers don't have to be FOSS lovers.  Anyone who wants some
+quick money from investors may come, regardless of whether they like free
+software, whether they worked with free software projects before, or whether
+they use free software in their work.  That explains why someone don't care
+about whether we use free software in an open-source promotion plan.  And those
+who speak for them were probably on the same boat.
+
+But it is difficult to start from scratch, especially for those who have never
+been free software contributor.  And here comes part four:
+
+4.  Instead, they simply copied existing open-source projects and label them as
+    domestically developed.
 
 Some copycats simply took the source code and changed the name.  Other more
 sophisticated copycats wrote code from scratch, using existing open-source
 projects as frames of reference.  Of course they didn't care about the user, the
-documentation or the code quality.  As long as it was made-in-China and
+documentation or the code quality.  As long as it was made-in-China and/or
 open-source, investors would throw money into it, and average people (especially
 extreme nationalists) would hail it as the future star of China when they saw it
 on the news.  And fluency in English was not required as long as they do
@@ -648,13 +667,14 @@ similar to world-famous ones, but claim to be domestically developed.
 
 A 'software supply chain' built this way will be brittle, if working at all.
 High-level applications will be built on flawed low-level libraries which don't
-even handle exceptions properly and may break at any time.  But will the
-developers care?  Probably not.  They would worry about their house rent and
-mortgage much more than software quality.  Their bosses wouldn't worry about
+even handle exceptions properly and may break at any time.  But will low-level
+developers care?  Probably not.  The decision of which library to use would be
+way above their pay grade, and they would worry about their house rent and
+mortgage much more than software quality.  Their bosses won't worry about
 software quality, either, if their companies monopolise a field, for example,
 food ordering.  When the end users have to choose between one faulty software
-and another, all they can do is pressing the reload button and pray it would
-work the next time.
+and another because there are no other choices, all they can do is pressing the
+reload button and pray it would work the next time.
 
 And will we win the trade war this way?  Well, I won't call it a win if average
 people are oppressed by faulty software instead of foreign countries.
@@ -675,16 +695,16 @@ The organisers tried hard keeping the event running, but there were much room
 for improvement.
 
 The communities?  Most of them were honestly doing free software developments,
-while some people are completely jerks.
+while some people were completely jerks.
 
 So should I tell people the Australian National University is awesome, and our
-research group is doing interesting researches?  Yes, to the students.  In fact,
-some students already expressed their interests in studying in the ANU when I
-told them about this possibility.
+research group is doing interesting researches?  Yes, to the students, and
+probably most community members, too.  In fact, some students already expressed
+their interests in studying in the ANU when I told them about this possibility.
 
 What about those who can't even read simple English articles and those who make
-bogus claims about their software performance?  'They were not our target
-audience', said one of my colleagues.  The ANU does have English language level
+bogus claims about their software performance?  'They are not our target
+audience', said one of my colleagues.  The ANU does have English language
 requirements and severe punishment against academic dishonesty.
 
 {% comment %}
