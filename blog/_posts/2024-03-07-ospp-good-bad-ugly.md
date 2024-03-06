@@ -27,7 +27,7 @@ to the US), your favourite software may immediately become unavailable.  For
 instance, [MATLAB] is [no longer available][matlab-news] to the [Harbin
 Institute of Technology][HIT].
 
-[Huawei]: https://huawei.com
+[Huawei]: https://www.huawei.com
 [MATLAB]: https://www.mathworks.com/products/matlab.html
 [matlab-news]: https://news.cgtn.com/news/2020-06-13/Chinese-FM-responds-to-MATLAB-s-ban-on-two-Chinese-universities-Rhx20G3pte/index.html
 [HIT]: https://www.hit.edu.cn/
