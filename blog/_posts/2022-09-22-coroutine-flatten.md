@@ -1,7 +1,7 @@
 ---
 layout: post
 title: "Traversing nested lists with coroutines, Rosetta Code style"
-tags: coroutine,rosettacode
+tags: coroutine rosettacode
 excerpt_separator: <!--more-->
 ---
 

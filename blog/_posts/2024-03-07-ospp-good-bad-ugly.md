@@ -1,7 +1,7 @@
 ---
 layout: post
 title: "OSPP'2023: The good, the bad, and the ugly"
-tags: mmtk,ospp
+tags: mmtk ospp
 excerpt_separator: <!--more-->
 ---
 

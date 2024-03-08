@@ -1,7 +1,7 @@
 ---
 layout: post
 title: eBPF and Perfetto UI proved me wrong
-tags: mmtk,ebpf,perfetto
+tags: mmtk ebpf perfetto
 ---
 
 This blog post is about an experience of debugging [MMTk] using a tracing and

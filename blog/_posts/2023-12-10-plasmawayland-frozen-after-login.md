@@ -1,7 +1,7 @@
 ---
 layout: post
 title: SDDM + KDE Plasma Wayland Frozen After Login
-tags: kde,wayland
+tags: kde wayland
 ---
 
 I could not log into my computer this morning.  I was using [SDDM] + [KDE][KDE]
