@@ -513,8 +513,9 @@ Strangely, some other people in the WeChat group started to speak for him.
     need to please ourselves.'
 
 Seriously?  I couldn't believe what I saw.  I asked whether they care about
-downstream projects built upon theirs, and apparently they didn't.  Knowing
-this, I stopped arguing because that would be futile.
+downstream projects built upon theirs (such as the 'Chinese Micronaut' mentioned
+earlier which happens to be its downstream project), and apparently they didn't.
+Knowing this, I stopped arguing because that would be futile.
 
 ## They hated free software and didn't want to promote it
 
@@ -651,7 +652,9 @@ projects as frames of reference.  Of course they didn't care about the user, the
 documentation or the code quality.  As long as it was made-in-China and/or
 open-source, investors would throw money into it, and average people (especially
 extreme nationalists) would hail it as the future star of China when they saw it
-on the news.  And fluency in English was not required as long as they do
+on the news.  And their bosses probably care more about the number of stars of
+their repositories because that would attract more eyeballs and probably more
+investment.  And fluency in English was not required as long as they do
 everything domestically.  In fact, some netizens (again especially extreme
 nationalists) have been advocating abolishing English education in China
 (although [the Chinese education authorities strongly
