@@ -15,12 +15,12 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Set up Ruby and install bundle packages
       uses: ruby/setup-ruby@v1
       with:
-        ruby-version: "3.1"
+        ruby-version: "3.3"
         bundler-cache: true
         cache-version: 0 # Increment this number if you need to re-download cached gems
 
@@ -36,7 +36,7 @@ jobs:
       run: find ./_site
 
     - name: Deploy to GitHub Pages
-      uses: peaceiris/actions-gh-pages@v3
+      uses: peaceiris/actions-gh-pages@v4
       with:
         deploy_key: ${{ secrets.GHPAGE_DEPLOY_KEY }}
         external_repository: wks/wks.github.io
