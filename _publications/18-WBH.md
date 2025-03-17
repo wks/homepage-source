@@ -6,6 +6,8 @@ title:  "Hop, Skip, & Jump: Practical On-Stack Replacement for a Cross-Platform 
 in:     "14th ACM SIGPLAN/SIGOPS International Conference on Virtual Execution Environments (VEE 2018), March 24–25, 2018, Williamsburg, VA, USA."
 year:   2018
 pdf:    "osr-vee-2018.pdf"
+doi:    "10.1145/3296975.3186412"
+link:   https://dl.acm.org/doi/10.1145/3296975.3186412
 ---
 
 On-stack replacement (OSR) is a performance-critical technology for many

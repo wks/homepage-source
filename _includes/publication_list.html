@@ -11,8 +11,10 @@
             Ph.D. thesis, <span class="publication-list-in">{{ pub.institution }}</span>,
             {% endcase %}
             <span class="publication-list-year">{{ pub.year }}</span>.
-            <span class="publication-list-link"><a href="{% link downloads/pdf/{{ pub.pdf }} %}">pdf</a></span>
             <span class="publication-list-abs-tog"><a class="abstract-toggle" href="#abstract-{{ pub.key }}">abstract</a></span>
+            <span class="publication-list-pdf"><a href="{% link downloads/pdf/{{ pub.pdf }} %}">pdf</a></span>
+            <span class="publication-list-doi"><a href="https://doi.org/{{ pub.doi }}">doi</a></span>
+            <span class="publication-list-url"><a href="{{ pub.link }}">link</a></span>
         </div>
         <div class="publication-abstract" id="abstract-{{ pub.key }}">
             {{ pub.content }}

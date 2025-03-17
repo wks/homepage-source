@@ -6,6 +6,8 @@ title:    "Micro Virtual Machines: A Solid Foundation for Managed Language Imple
 institution: College of Engineering and Computer Science, The Australian National University
 year:     2017
 pdf:      "wang-thesis-2018.pdf"
+doi:      "10.25911/5d612129114fa"
+link:     https://openresearch-repository.anu.edu.au/items/f98287f0-6fd7-44af-891a-ae0328a37e28
 ---
 
 Today new programming languages proliferate, but many of them suffer from poor
