@@ -3,7 +3,7 @@
     <li class="publication-item">
         <div class="publication-line">
             <span class="publication-list-author">{{ pub.author }}</span>,
-            "<span class="publication-list-title">{{ pub.title }}</span>,"
+            "<span class="publication-list-title">{{ pub.title }}</span>",
             {% case pub.kind %}
             {% when "inproceedings" %}
             in <span class="publication-list-in">{{ pub.in }}</span>,
