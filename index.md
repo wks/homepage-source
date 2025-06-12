@@ -3,10 +3,6 @@ layout: default
 title: Home
 ---
 
-<small> Psssssst! I have an unofficial [BitTorrent file][dacapo-torrent] for The
-DaCapo Benchmark Suite 23.11-chopin.  Try it if the official download link is
-too slow for you.</small>
-
 {% include recent_blog_posts.html %}
 
 ## About Me
