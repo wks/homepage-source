@@ -34,3 +34,6 @@ gem "webrick"
 
 # For including source code directly.
 gem 'jekyll_include_plugin'
+
+# Figures
+gem 'jekyll-figure'

@@ -63,3 +63,21 @@ a code.highlighter-rouge {
     padding-bottom: 1ex;
     font-size: 90%;
 }
+
+// Floating figures
+figure.floating {
+    float: right;
+    clear: right;
+    width: 38.2%;
+}
+
+figure.floating.smaller {
+    width: 25%;
+}
+
+// Block figures
+figure.block {
+    width: 50%;
+    margin-left: auto;
+    margin-right: auto;
+}
