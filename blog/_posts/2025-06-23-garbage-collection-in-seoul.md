@@ -62,7 +62,7 @@ In such situations, we found translation software very handy.
 Those modern AI-based apps allowed us to take a photo and translate the text on the picture.
 Although none of my colleagues speak Korean, we managed to order authentic Korean food by translating the menu and communicating with the waiters with gesture languages.
 
-{% figure [caption:"Translation software handles remote controls quite well."] [class:"floating" %}
+{% figure [caption:"Translation software handles remote controls quite well."] [class:"floating"] %}
 ![Bidet control and translation]({% link assets/img/seoul2025/bidet-control-and-translate.jpg %})
 {% endfigure %}
 
